@@ -169,10 +169,14 @@ thread_tick (void) {
 		old_level = intr_disable();
 		struct list_elem *i;
 		
+		int fucking_wakeup_count = 0;
 		for (i = list_begin(&timer_semas);i != list_end(&timer_semas);i = list_next(i)){
 			if (--list_entry(i, struct timer_sema, elem)->ticks <= 0) {
-				sema_up(list_entry(i, struct timer_sema, elem)->sema);
+				fucking_wakeup_count++;
 			}
+		}
+		for (int _ = 0; _ < fucking_wakeup_count; _++){
+			sema_up(list_entry(list_pop_front(&timer_semas), struct timer_sema, elem)->sema);
 		}
 		intr_set_level(old_level);
 	}
@@ -335,7 +339,13 @@ thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks) {
 	new_sema->sema = ticks_sema;
 	new_sema->ticks = ticks;
 
-	list_push_back (&timer_semas, &new_sema->elem);
+	bool tick_less (const struct list_elem *a, const struct list_elem *b);
+	struct list_elem *i; 
+	for (i = list_begin(&timer_semas); i == list_end(&timer_semas); i = list_next(i)){
+		if (i == list_end(&timer_semas))break;
+		if (ticks < list_entry(i, struct timer_sema, elem)->ticks)break;	
+	}
+	list_insert(i, &new_sema->elem);
 	intr_set_level (old_level);
 }
 
