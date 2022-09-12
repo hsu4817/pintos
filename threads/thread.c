@@ -164,17 +164,19 @@ thread_tick (void) {
 		kernel_ticks++;
 
 
-	enum intr_level old_level;
-	old_level = intr_disable();
-	struct list_elem *i;
-	
-	for (i = list_begin(&timer_semas);i != list_end(&timer_semas);i = list_next(i)){
-
-		if (--list_entry(i, struct timer_sema, elem)->ticks <= 0) {
-			sema_up(list_entry(i, struct timer_sema, elem)->sema);
+	if (!list_empty(&timer_semas)){
+		enum intr_level old_level;
+		old_level = intr_disable();
+		struct list_elem *i;
+		
+		for (i = list_begin(&timer_semas);i != list_end(&timer_semas);i = list_next(i)){
+			if (--list_entry(i, struct timer_sema, elem)->ticks <= 0) {
+				sema_up(list_entry(i, struct timer_sema, elem)->sema);
+			}
 		}
+		intr_set_level(old_level);
 	}
-	intr_set_level(old_level);
+	
 
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
@@ -334,8 +336,12 @@ thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks) {
 	new_sema->ticks = ticks;
 
 	list_push_back (&timer_semas, &new_sema->elem);
-	
-	sema_down(ticks_sema);
+	while (!list_empty (&destruction_req)) {
+		struct thread *victim =
+			list_entry (list_pop_front (&destruction_req), struct thread, elem);
+		palloc_free_page(victim);
+	}
+	schedule ();
 	intr_set_level (old_level);
 }
 

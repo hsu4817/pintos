@@ -96,6 +96,8 @@ timer_sleep (int64_t ticks) {
 	sema_init (&time_elapsed, 0);
 	
 	thread_sleep_yield(&time_elapsed, ticks);
+
+	sema_down(&time_elapsed);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
