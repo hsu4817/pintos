@@ -336,12 +336,6 @@ thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks) {
 	new_sema->ticks = ticks;
 
 	list_push_back (&timer_semas, &new_sema->elem);
-	while (!list_empty (&destruction_req)) {
-		struct thread *victim =
-			list_entry (list_pop_front (&destruction_req), struct thread, elem);
-		palloc_free_page(victim);
-	}
-	schedule ();
 	intr_set_level (old_level);
 }
 
