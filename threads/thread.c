@@ -171,7 +171,8 @@ thread_tick (void) {
 		
 		int fucking_wakeup_count = 0;
 		for (i = list_begin(&timer_semas);i != list_end(&timer_semas);i = list_next(i)){
-			if (--list_entry(i, struct timer_sema, elem)->ticks <= 0) {
+			if (--(list_entry(i, struct timer_sema, elem)->ticks) <= 0) {
+				
 				fucking_wakeup_count++;
 			}
 		}
@@ -341,8 +342,7 @@ thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks) {
 
 	bool tick_less (const struct list_elem *a, const struct list_elem *b);
 	struct list_elem *i; 
-	for (i = list_begin(&timer_semas); i == list_end(&timer_semas); i = list_next(i)){
-		if (i == list_end(&timer_semas))break;
+	for (i = list_begin(&timer_semas); i != list_end(&timer_semas); i = list_next(i)){
 		if (ticks < list_entry(i, struct timer_sema, elem)->ticks)break;	
 	}
 	list_insert(i, &new_sema->elem);

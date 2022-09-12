@@ -91,7 +91,7 @@ timer_elapsed (int64_t then) {
 void
 timer_sleep (int64_t ticks) {
 	ASSERT (intr_get_level () == INTR_ON);
-	printf("timer sleep called");
+
 	struct semaphore time_elapsed;
 	sema_init (&time_elapsed, 0);
 
