@@ -90,11 +90,12 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
-
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	printf("timer sleep called");
+	struct semaphore time_elapsed;
+	sema_init (&time_elapsed, 0);
+	
+	thread_sleep_yield(&time_elapsed, ticks);
 }
 
 /* Suspends execution for approximately MS milliseconds. */

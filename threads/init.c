@@ -116,7 +116,7 @@ main (void) {
 	vm_init ();
 #endif
 
-	printf ("Boot complete.\n");
+	printf ("Boot complet.\n");
 
 	/* Run actions specified on kernel command line. */
 	run_actions (argv);

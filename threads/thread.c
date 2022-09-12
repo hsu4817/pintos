@@ -8,6 +8,7 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
@@ -40,6 +41,17 @@ static struct lock tid_lock;
 /* Thread destruction requests */
 static struct list destruction_req;
 
+/* List for thread sleep */
+struct timer_sema {
+	struct semaphore *sema;
+	int64_t ticks;
+
+	struct list_elem elem;
+};
+
+static struct list timer_semas;
+
+
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
@@ -48,6 +60,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+ 
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -109,6 +122,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	list_init(&timer_semas);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -148,6 +162,19 @@ thread_tick (void) {
 #endif
 	else
 		kernel_ticks++;
+
+
+	enum intr_level old_level;
+	old_level = intr_disable();
+	struct list_elem *i;
+	
+	for (i = list_begin(&timer_semas);i != list_end(&timer_semas);i = list_next(i)){
+
+		if (--list_entry(i, struct timer_sema, elem)->ticks <= 0) {
+			sema_up(list_entry(i, struct timer_sema, elem)->sema);
+		}
+	}
+	intr_set_level(old_level);
 
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
@@ -290,6 +317,26 @@ thread_exit (void) {
 	intr_disable ();
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
+}
+
+
+/* Yields the CPU when current thread is put to sleep. */
+void
+thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks) {
+	enum intr_level old_level;
+
+	ASSERT (!intr_context ());
+
+	old_level = intr_disable();
+	struct timer_sema *new_sema = malloc(sizeof(struct timer_sema));
+
+	new_sema->sema = ticks_sema;
+	new_sema->ticks = ticks;
+
+	list_push_back (&timer_semas, &new_sema->elem);
+	
+	sema_down(ticks_sema);
+	intr_set_level (old_level);
 }
 
 /* Yields the CPU.  The current thread is not put to sleep and
