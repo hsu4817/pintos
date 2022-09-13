@@ -364,6 +364,15 @@ thread_yield (void) {
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
+int
+thread_get_modified_priority (struct thread *t) {
+	int highest = thread_current()->priority;
+	struct list_elem *i;
+	for (i = list_begin(&t->donated_priority); i != list_end(&t->donated_priority); i = list_next(i)){
+		if (list_entry(i, struct donated_priority, elem)->priority > highest) highest = list_entry(i, struct donated_priority, elem)->priority;
+	}
+	return highest;
+}
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
@@ -374,7 +383,7 @@ thread_set_priority (int new_priority) {
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+	return thread_get_modified_priority(thread_current());
 }
 
 /* Sets the current thread's nice value to NICE. */
