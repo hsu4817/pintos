@@ -366,12 +366,15 @@ thread_yield (void) {
 }
 int
 thread_get_modified_priority (struct thread *t) {
-	int highest = thread_current()->priority;
+	int highest = t->priority;
 	struct list_elem *i;
-	for (i = list_begin(&t->donated_priority); i != list_end(&t->donated_priority); i = list_next(i)){
-		if (list_entry(i, struct donated_priority, elem)->priority > highest) highest = list_entry(i, struct donated_priority, elem)->priority;
+	if (list_empty(&t->donated_priority)) return highest;
+	else{
+		for (i = list_begin(&t->donated_priority); i != list_end(&t->donated_priority); i = list_next(i)){
+			if (list_entry(i, struct donated_priority, elem)->priority > highest) highest = list_entry(i, struct donated_priority, elem)->priority;
+		}
+		return highest;
 	}
-	return highest;
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -487,8 +490,9 @@ init_thread (struct thread *t, const char *name, int priority) {
    idle_thread. */
 static struct thread *
 next_thread_to_run (void) {
-	if (list_empty (&ready_list))
+	if (list_empty (&ready_list)){
 		return idle_thread;
+	}
 	else {
 		return max_thread_priority(&ready_list);
 	}
@@ -504,6 +508,7 @@ max_thread_priority(struct list* list){
 	ASSERT (!list_empty(list));
 
 	max_prio_ready = list_begin(list);
+
 	for (i_ready = list_begin(list); i_ready != list_back(list); i_ready = list_next(i_ready)){
 		if( max_ready_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
 			max_prio_ready = i_ready;
