@@ -484,10 +484,22 @@ init_thread (struct thread *t, const char *name, int priority) {
    idle_thread. */
 static struct thread *
 next_thread_to_run (void) {
+
+	struct list_elem *i_ready;
+	struct list_elem *max_prio_ready;
+	int max_ready_priority = 0;
+
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+		max_prio_ready = list_begin(&ready_list);
+		for (i_ready = list_begin(&ready_list); i_ready != list_back(&ready_list); i_ready = list_next(&ready_list) ){
+			if( max_ready_priority < thread_get_modified_priority(i_ready)){
+				max_prio_ready = i_ready;
+			}
+		}
+
+		return list_entry (max_prio_ready, struct thread, elem);
 }
 
 /* Use iretq to launch the thread */
