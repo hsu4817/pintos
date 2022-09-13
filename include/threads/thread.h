@@ -143,7 +143,7 @@ void thread_exit (void) NO_RETURN;
 void thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks);
 void thread_yield (void);
 
-int thread_get_modified_priority (sturct thread*);
+int thread_get_modified_priority (struct thread*);
 int thread_get_priority (void);
 void thread_set_priority (int);
 

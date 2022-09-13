@@ -491,15 +491,16 @@ next_thread_to_run (void) {
 
 	if (list_empty (&ready_list))
 		return idle_thread;
-	else
+	else {
 		max_prio_ready = list_begin(&ready_list);
-		for (i_ready = list_begin(&ready_list); i_ready != list_back(&ready_list); i_ready = list_next(&ready_list) ){
-			if( max_ready_priority < thread_get_modified_priority(i_ready)){
+		for (i_ready = list_begin(&ready_list); i_ready != list_back(&ready_list); i_ready = list_next(i_ready)){
+			if( max_ready_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
 				max_prio_ready = i_ready;
 			}
 		}
 
 		return list_entry (max_prio_ready, struct thread, elem);
+	}
 }
 
 /* Use iretq to launch the thread */
