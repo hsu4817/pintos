@@ -503,6 +503,27 @@ next_thread_to_run (void) {
 	}
 }
 
+// input: thread list , output: max priority thread of the given list
+static struct thread *
+max_thread_priority(struct list* list){
+	struct list_elem *i_ready;
+	struct list_elem *max_prio_ready;
+	int max_ready_priority = 0;
+
+	if (list_empty (list))
+		return idle_thread;
+	else {
+		max_prio_ready = list_begin(list);
+		for (i_ready = list_begin(list); i_ready != list_back(list); i_ready = list_next(i_ready)){
+			if( max_ready_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
+				max_prio_ready = i_ready;
+			}
+		}
+
+		return list_entry (max_prio_ready, struct thread, elem);
+	}
+}
+
 /* Use iretq to launch the thread */
 void
 do_iret (struct intr_frame *tf) {
