@@ -191,12 +191,18 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!lock_held_by_current_thread (lock));
 
 	if (lock->holder != NULL) {
-		struct donated_priority* new_donation;
-		new_donation->donater = thread_current ()->tid;
-		new_donation->priority = thread_get_priority();
-		list_push_back(&lock->holder->donated_priority, &new_donation->elem);
+		struct donated_priority new_donation;
+		new_donation.donater = thread_current ();
+		new_donation.priority = thread_get_priority();
+		list_push_back(&lock->holder->donated_priority, &new_donation.elem);
+
+		sema_down (&lock->semaphore);
+		list_remove(&new_donation.elem);
+
 	}
-	sema_down (&lock->semaphore);
+	else sema_down (&lock->semaphore);
+	
+	
 	lock->holder = thread_current ();
 }
 

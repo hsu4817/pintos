@@ -378,7 +378,7 @@ thread_get_modified_priority (struct thread *t) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
-	if(new_priority < max_thread_priority(&ready_list)){
+	if(new_priority < thread_get_modified_priority(max_thread_priority(&ready_list))){
 		thread_yield();
 	}
 }
@@ -487,44 +487,30 @@ init_thread (struct thread *t, const char *name, int priority) {
    idle_thread. */
 static struct thread *
 next_thread_to_run (void) {
-
-	struct list_elem *i_ready;
-	struct list_elem *max_prio_ready;
-	int max_ready_priority = 0;
-
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else {
-		max_prio_ready = list_begin(&ready_list);
-		for (i_ready = list_begin(&ready_list); i_ready != list_back(&ready_list); i_ready = list_next(i_ready)){
-			if( max_ready_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
-				max_prio_ready = i_ready;
-			}
-		}
-
-		return list_entry (max_prio_ready, struct thread, elem);
+		return max_thread_priority(&ready_list);
 	}
 }
 
 // input: thread list , output: max priority thread of the given list
-static struct thread *
+struct thread *
 max_thread_priority(struct list* list){
 	struct list_elem *i_ready;
 	struct list_elem *max_prio_ready;
 	int max_ready_priority = 0;
 
-	if (list_empty (list))
-		return idle_thread;
-	else {
-		max_prio_ready = list_begin(list);
-		for (i_ready = list_begin(list); i_ready != list_back(list); i_ready = list_next(i_ready)){
-			if( max_ready_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
-				max_prio_ready = i_ready;
-			}
-		}
+	ASSERT (!list_empty(list));
 
-		return list_entry (max_prio_ready, struct thread, elem);
+	max_prio_ready = list_begin(list);
+	for (i_ready = list_begin(list); i_ready != list_back(list); i_ready = list_next(i_ready)){
+		if( max_ready_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
+			max_prio_ready = i_ready;
+		}
 	}
+
+	return list_entry (max_prio_ready, struct thread, elem);
 }
 
 /* Use iretq to launch the thread */
