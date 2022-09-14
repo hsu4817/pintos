@@ -93,6 +93,11 @@ struct donation {
 	struct list_elem elem;
 };
 
+struct thread_with_sema {
+	struct thread *t;
+	struct semaphore *sema;
+};
+
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
@@ -100,6 +105,7 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	struct list donations;				/* Donated_priority. */
+	struct thread_with_sema waiting;	/* If thread blocked, it is waiting this thread. */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */

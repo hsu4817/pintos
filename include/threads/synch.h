@@ -4,6 +4,8 @@
 #include <list.h>
 #include <stdbool.h>
 
+#define DONATE_CHAIN_MAX 8
+
 /* A counting semaphore. */
 struct semaphore {
 	unsigned value;             /* Current value. */

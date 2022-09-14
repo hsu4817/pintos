@@ -127,7 +127,6 @@ sema_up (struct semaphore *sema) {
 		Then unblocks it, which can invoke schedule.
 		*/
 		list_remove(&highest_waiter->elem);
-
 		if (!list_empty(&curr->donations)){
 
 			for (i=list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
@@ -222,31 +221,64 @@ lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
+	
+	struct thread *curr = thread_current();
 
-	struct donation *donation;
+	if (thread_current()->waiting.t != NULL){
+		printf("Lock acquire called in thread waiting %s", curr->waiting.t->name);
+	}
+	
 	if (lock->holder != NULL) {
 		struct list_elem *i;
+		struct thread *donatee = lock->holder;
+		struct donation *donation = malloc(sizeof(struct donation));
 
-		for (i = list_begin(&lock->holder->donations); i != list_end(&lock->holder->donations); i = list_next(i)){
-			if (list_entry(i, struct donation, elem)->sema == &lock->semaphore){
-				// If current thread has higher priority than overall priority donation of this semaphore, change it. 
-				donation = list_entry(i, struct donation, elem);
-				if (thread_get_priority() > donation->highest_pri) {
-					donation->highest_pri = thread_get_priority();
+		printf("%s trys to aquire lock.\n", curr->name);
+		donation->sema = &lock->semaphore;
+		donation->highest_pri = thread_get_priority();
+
+		printf("Created donation.\n");
+		curr->waiting.sema = &lock->semaphore;
+		printf("1\n");
+		curr->waiting.t = lock->holder;
+		printf("2\n");
+
+		printf("Added lock holder to waiting.\n");
+
+		int _;
+		for (_ = DONATE_CHAIN_MAX; _ == 0; _--){
+			for (i = list_begin(&donatee->donations); i != list_end(&donatee->donations); i = list_next(i)){
+				// Check if donatee already has donation for this sema.
+				if (list_entry(i, struct donation, elem)->sema == donation->sema){
+					// If current thread has higher priority than overall priority donation of this semaphore, change it. 
+					if (list_entry(i, struct donation, elem)->highest_pri < donation->highest_pri) {
+						list_entry(i, struct donation, elem)->highest_pri = donation->highest_pri;
+					}
+					break;
 				}
-				break;
 			}
+			// If this donation is new for this sema.
+			if (i == list_end(&donatee->donations)){
+				list_push_back(&donatee->donations, &donation->elem);
+			}
+
+			if (donatee->waiting.t == NULL) break;
+
+			if (donation->highest_pri > thread_get_modified_priority(donatee))
+			{
+				donation->sema = donatee->waiting.sema;
+				donation->highest_pri = thread_get_modified_priority(donatee);
+				donatee = donatee->waiting.t;
+			}
+			
 		}
-		if (i == list_end(&lock->holder->donations)){
-			donation = malloc(sizeof(struct donation));
-			donation->sema = &lock->semaphore;
-			donation->highest_pri = thread_get_priority();
-			list_push_back(&lock->holder->donations, &donation->elem);
-		}
+		ASSERT(_);
+
 	}
 	
 	sema_down (&lock->semaphore);
-
+	curr->waiting.sema = NULL;
+	curr->waiting.t = NULL;
 	lock->holder = thread_current ();
 }
 
