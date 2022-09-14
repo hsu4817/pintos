@@ -96,6 +96,8 @@ struct donation {
 struct thread_with_sema {
 	struct thread *t;
 	struct semaphore *sema;
+
+	struct list_elem elem;
 };
 
 struct thread {
@@ -105,7 +107,7 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	struct list donations;				/* Donated_priority. */
-	struct thread_with_sema waiting;	/* If thread blocked, it is waiting this thread. */
+	struct list waiting;				/* If thread blocked, it is waiting this thread. */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */

@@ -224,24 +224,29 @@ lock_acquire (struct lock *lock) {
 	
 	struct thread *curr = thread_current();
 
-	if (thread_current()->waiting.t != NULL){
-		printf("Lock acquire called in thread waiting %s", curr->waiting.t->name);
+	if (!list_empty(&curr->waiting)){
+		printf("asdf\n");
 	}
 	
 	if (lock->holder != NULL) {
 		struct list_elem *i;
 		struct thread *donatee = lock->holder;
 		struct donation *donation = malloc(sizeof(struct donation));
+		struct thread_with_sema *waiter = malloc(sizeof(struct thread_with_sema));
 
 		printf("%s trys to aquire lock.\n", curr->name);
 		donation->sema = &lock->semaphore;
 		donation->highest_pri = thread_get_priority();
 
 		printf("Created donation.\n");
-		curr->waiting.sema = &lock->semaphore;
+		
+		waiter->sema = &lock->semaphore;
 		printf("1\n");
-		curr->waiting.t = lock->holder;
+		waiter->t = lock->holder;
 		printf("2\n");
+		printf("%ld\n", sizeof(*curr));
+		printf("%ld\n", sizeof(*waiter));
+		list_push_back(&curr->waiting, &waiter->elem);
 
 		printf("Added lock holder to waiting.\n");
 
@@ -262,23 +267,23 @@ lock_acquire (struct lock *lock) {
 				list_push_back(&donatee->donations, &donation->elem);
 			}
 
-			if (donatee->waiting.t == NULL) break;
+			if (list_empty(&donatee->waiting)) break;
 
 			if (donation->highest_pri > thread_get_modified_priority(donatee))
 			{
-				donation->sema = donatee->waiting.sema;
+				donation->sema = list_entry(list_begin(&donatee->waiting), struct thread_with_sema, elem)->sema;
 				donation->highest_pri = thread_get_modified_priority(donatee);
-				donatee = donatee->waiting.t;
+				donatee = list_entry(list_begin(&donatee->waiting), struct thread_with_sema, elem)->t;
 			}
 			
 		}
 		ASSERT(_);
 
+		free(donatee);
 	}
 	
 	sema_down (&lock->semaphore);
-	curr->waiting.sema = NULL;
-	curr->waiting.t = NULL;
+	if (!list_empty(&curr->waiting)) list_pop_front(&curr->waiting);
 	lock->holder = thread_current ();
 }
 
