@@ -107,7 +107,7 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	struct list donations;				/* Donated_priority. */
-	struct list waiting;				/* If thread blocked, it is waiting this thread. */
+	struct lock lock;					/* Locked with this */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
