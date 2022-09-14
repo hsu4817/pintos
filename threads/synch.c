@@ -31,6 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -116,7 +117,7 @@ sema_up (struct semaphore *sema) {
 	If there is waiter, unblock.
 	*/
 	if (!list_empty (&sema->waiters)){
-		struct thread *highest_waiter = list_entry(max_thread_priority(&sema->waiters), struct thread, elem);
+		struct thread *highest_waiter = max_thread_priority(&sema->waiters);
 		struct list_elem *i;
 		struct thread *curr = thread_current();
 
@@ -126,15 +127,18 @@ sema_up (struct semaphore *sema) {
 		Then unblocks it, which can invoke schedule.
 		*/
 		list_remove(&highest_waiter->elem);
-		
-		if (!list_empty(&curr->donated_priority)){
-			for (i=list_begin(&curr->donated_priority); i != list_end(&curr->donated_priority); i = list_next(i)){
-				if (list_entry(i, struct donated_priority, elem)->donater == highest_waiter) break;
+
+		if (!list_empty(&curr->donations)){
+			
+			for (i=list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
+				if (list_entry(i, struct donation, elem)->sema == sema) break;
 			}
+			list_entry(i, struct donation, elem)->highest_pri = thread_get_modified_priority(max_thread_priority(&list_entry(i, struct donation, elem)->sema->waiters));
+
 			list_remove(i);
 		}
 
-		printf("Unblock %s while sema up.\n", highest_waiter->name);
+		// printf("Unblock %s while sema up.\n", highest_waiter->name);
 		need_schedule = thread_unblock (highest_waiter);
 		if (intr_context()) need_schedule = false;
 	}
@@ -216,15 +220,30 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	struct donation *donation;
 	if (lock->holder != NULL) {
-		struct donated_priority new_donation;
-		new_donation.donater = thread_current ();
-		new_donation.priority = thread_get_priority();
-		list_push_back(&lock->holder->donated_priority, &new_donation.elem);
+		struct list_elem *i;
+
+		for (i = list_begin(&lock->holder->donations); i != list_end(&lock->holder->donations); i = list_next(i)){
+			if (list_entry(i, struct donation, elem)->sema == &lock->semaphore){
+				// If current thread has higher priority than overall priority donation of this semaphore, change it. 
+				donation = list_entry(i, struct donation, elem);
+				if (thread_get_priority() > donation->highest_pri) {
+					donation->highest_pri = thread_get_priority();
+				}
+				break;
+			}
+		}
+		if (i == list_end(&lock->holder->donations)){
+			donation = malloc(sizeof(struct donation));
+			donation->sema = &lock->semaphore;
+			donation->highest_pri = thread_get_priority();
+			list_push_back(&lock->holder->donations, &donation->elem);
+		}
 	}
 	
 	sema_down (&lock->semaphore);
-	
+
 	lock->holder = thread_current ();
 }
 

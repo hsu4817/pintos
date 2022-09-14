@@ -287,18 +287,20 @@ thread_unblock (struct thread *t) {
 	*/
 	if (thread_get_modified_priority(t) > thread_get_modified_priority(thread_current())){
 		
-		printf ("Unblock invoked schdule.\n");
+		// printf ("Unblock invoked schdule.\n");
 		
 		schedule_require = true;
 	}
 
+	/*
 	printf ("Ready threads : ");
 	struct list_elem *i;
 	for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
 		printf ("%s || ", list_entry(i, struct thread, elem)->name);
 	}
 	printf ("\n");
-	
+	*/
+
 	intr_set_level (old_level);
 	return schedule_require;
 }
@@ -391,13 +393,13 @@ thread_yield (void) {
 int
 thread_get_modified_priority (struct thread *t) {
 	int highest = t->priority;
-	if (list_empty(&t->donated_priority)) {
+	if (list_empty(&t->donations)) {
 		return highest;
 	}
 	else{
 		struct list_elem *i;
-		for (i = list_begin(&t->donated_priority); i != list_end(&t->donated_priority); i = list_next(i)){
-			if (list_entry(i, struct donated_priority, elem)->priority > highest) highest = list_entry(i, struct donated_priority, elem)->priority;
+		for (i = list_begin(&t->donations); i != list_end(&t->donations); i = list_next(i)){
+			if (list_entry(i, struct donation, elem)->highest_pri > highest) highest = list_entry(i, struct donation, elem)->highest_pri;
 		}
 		return highest;
 	}
@@ -409,7 +411,7 @@ thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
 
 	if (!list_empty(&ready_list)){
-		if(new_priority <= thread_get_modified_priority(list_entry(max_thread_priority(&ready_list), struct thread, elem))){
+		if(new_priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
 		thread_yield();
 		}	
 	}
@@ -511,7 +513,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
-	list_init(&t->donated_priority);
+	list_init(&t->donations);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -525,14 +527,14 @@ next_thread_to_run (void) {
 		return idle_thread;
 	}
 	else {
-		struct list_elem* next = max_thread_priority(&ready_list);
-		list_remove(next);
-		return list_entry(next, struct thread, elem);
+		struct thread* next = max_thread_priority(&ready_list);
+		list_remove(&next->elem);
+		return next;
 	}
 }
 
 // input: thread list , output: max priority thread of the given list
-struct list_elem*
+struct thread*
 max_thread_priority(struct list* list){
 	struct list_elem *i_ready;
 	struct list_elem *thread_max;
@@ -550,7 +552,7 @@ max_thread_priority(struct list* list){
 		}
 	}
 
-	return thread_max;
+	return list_entry(thread_max, struct thread, elem);
 }
 
 /* Use iretq to launch the thread */
