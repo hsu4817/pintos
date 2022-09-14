@@ -33,6 +33,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -141,6 +142,7 @@ sema_up (struct semaphore *sema) {
 		}
 
 		// printf("Unblock %s while sema up.\n", highest_waiter->name);
+		
 		need_schedule = thread_unblock (highest_waiter);
 		if (intr_context()) need_schedule = false;
 	}
@@ -221,64 +223,21 @@ lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
-	
-	struct thread *curr = thread_current();
 
-	if (curr->lock.holder != NULL){
-		printf("asdf\n");
-	}
-	
+	enum intr_level old_level = intr_disable();
+
 	if (lock->holder != NULL) {
-		struct list_elem *i;
-		struct thread *donatee = lock->holder;
-		struct donation *donation = malloc(sizeof(struct donation));
+		struct thread *curr = thread_current();
 
-		printf("%s trys to aquire lock.\n", curr->name);
-		donation->sema = &lock->semaphore;
-		donation->highest_pri = thread_get_priority();
-
-		printf("Created donation.\n");
-		curr->lock.semaphore = lock->semaphore;
+		curr->waiting.sema = &lock->semaphore;
+		curr->waiting.tid = lock->holder->tid;
 		
-		printf("11111\n");
-		curr->lock.holder = lock->holder;
-
-		printf("Added lock holder to waiting.\n");
-
-		int _;
-		for (_ = DONATE_CHAIN_MAX; _ == 0; _--){
-			for (i = list_begin(&donatee->donations); i != list_end(&donatee->donations); i = list_next(i)){
-				// Check if donatee already has donation for this sema.
-				if (list_entry(i, struct donation, elem)->sema == donation->sema){
-					// If current thread has higher priority than overall priority donation of this semaphore, change it. 
-					if (list_entry(i, struct donation, elem)->highest_pri < donation->highest_pri) {
-						list_entry(i, struct donation, elem)->highest_pri = donation->highest_pri;
-					}
-					break;
-				}
-			}
-			// If this donation is new for this sema.
-			if (i == list_end(&donatee->donations)){
-				list_push_back(&donatee->donations, &donation->elem);
-			}
-
-			if (curr->lock.holder == NULL) break;
-
-			if (donation->highest_pri > thread_get_modified_priority(donatee))
-			{
-				donation->sema = &(curr->lock.semaphore);
-				donation->highest_pri = thread_get_modified_priority(donatee);
-				donatee = curr->lock.holder;
-			}
-			
-		}
-		ASSERT(_);
-
-		free(donatee);
+		thread_recalc_modified_priority(curr);
 	}
-	
+	intr_set_level(old_level);
+
 	sema_down (&lock->semaphore);
-	lock_init(&curr->lock);
+	thread_current()->waiting.tid = -1;
 	lock->holder = thread_current ();
 }
 

@@ -13,6 +13,12 @@ struct semaphore {
 
 	struct list_elem elem;
 };
+struct donation {
+	struct semaphore *sema;
+	int highest_pri;
+	
+	struct list_elem elem;
+};
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
