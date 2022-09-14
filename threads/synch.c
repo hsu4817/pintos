@@ -123,17 +123,20 @@ sema_up (struct semaphore *sema) {
 
 		/*
 		Remove thread that has highest priority among semphore waiter. 
-		Remove donation occured by prior waiter.
+		
 		Then unblocks it, which can invoke schedule.
 		*/
 		list_remove(&highest_waiter->elem);
 
 		if (!list_empty(&curr->donations)){
-			
+
 			for (i=list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
 				if (list_entry(i, struct donation, elem)->sema == sema) break;
 			}
-			list_entry(i, struct donation, elem)->highest_pri = thread_get_modified_priority(max_thread_priority(&list_entry(i, struct donation, elem)->sema->waiters));
+			
+			if (!list_empty(&sema->waiters)){
+				list_entry(i, struct donation, elem)->highest_pri = thread_get_modified_priority(max_thread_priority(&list_entry(i, struct donation, elem)->sema->waiters));
+			}
 
 			list_remove(i);
 		}
