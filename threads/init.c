@@ -103,6 +103,7 @@ main (void) {
 #endif
 	/* Start thread scheduler and enable interrupts. */
 	thread_start ();
+	printf("Thread start complete.\n");
 	serial_init_queue ();
 	timer_calibrate ();
 

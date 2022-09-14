@@ -133,7 +133,7 @@ typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
-void thread_unblock (struct thread *);
+bool thread_unblock (struct thread *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -152,7 +152,7 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-struct thread *max_thread_priority(struct list* list);
+struct list_elem *max_thread_priority(struct list* list);
 void do_iret (struct intr_frame *tf);
 
 #endif /* threads/thread.h */

@@ -178,6 +178,7 @@ thread_tick (void) {
 		}
 		for (int _ = 0; _ < fucking_wakeup_count; _++){
 			sema_up(list_entry(list_pop_front(&timer_semas), struct timer_sema, elem)->sema);
+			intr_yield_on_return ();
 		}
 		intr_set_level(old_level);
 	}
@@ -225,6 +226,7 @@ thread_create (const char *name, int priority,
 
 	/* Initialize thread. */
 	init_thread (t, name, priority);
+	// printf("Initialized thread %s.\n",name);
 	tid = t->tid = allocate_tid ();
 
 	/* Call the kernel_thread if it scheduled.
@@ -239,7 +241,7 @@ thread_create (const char *name, int priority,
 	t->tf.eflags = FLAG_IF;
 
 	/* Add to run queue. */
-	thread_unblock (t);
+	if (thread_unblock (t)) thread_yield();
 
 	return tid;
 }
@@ -266,17 +268,39 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
-void
+bool
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
+	bool schedule_require = false;
 
 	ASSERT (is_thread (t));
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
+	
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
+	/*
+	printf("Now unblocked %s.\n",t->name);
+	printf("P of unblocking thread %s : %d.\n",t->name, thread_get_modified_priority(t));
+	printf("P of current thread %s : %d.\n",thread_current()->name, thread_get_modified_priority(thread_current()));
+	*/
+	if (thread_get_modified_priority(t) > thread_get_modified_priority(thread_current())){
+		
+		printf ("Unblock invoked schdule.\n");
+		
+		schedule_require = true;
+	}
+
+	printf ("Ready threads : ");
+	struct list_elem *i;
+	for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+		printf ("%s || ", list_entry(i, struct thread, elem)->name);
+	}
+	printf ("\n");
+	
 	intr_set_level (old_level);
+	return schedule_require;
 }
 
 /* Returns the name of the running thread. */
@@ -367,9 +391,11 @@ thread_yield (void) {
 int
 thread_get_modified_priority (struct thread *t) {
 	int highest = t->priority;
-	struct list_elem *i;
-	if (list_empty(&t->donated_priority)) return highest;
+	if (list_empty(&t->donated_priority)) {
+		return highest;
+	}
 	else{
+		struct list_elem *i;
 		for (i = list_begin(&t->donated_priority); i != list_end(&t->donated_priority); i = list_next(i)){
 			if (list_entry(i, struct donated_priority, elem)->priority > highest) highest = list_entry(i, struct donated_priority, elem)->priority;
 		}
@@ -381,9 +407,13 @@ thread_get_modified_priority (struct thread *t) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
-	if(new_priority < thread_get_modified_priority(max_thread_priority(&ready_list))){
+
+	if (!list_empty(&ready_list)){
+		if(new_priority <= thread_get_modified_priority(list_entry(max_thread_priority(&ready_list), struct thread, elem))){
 		thread_yield();
+		}	
 	}
+	
 }
 
 /* Returns the current thread's priority. */
@@ -481,6 +511,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	list_init(&t->donated_priority);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -494,28 +525,32 @@ next_thread_to_run (void) {
 		return idle_thread;
 	}
 	else {
-		return max_thread_priority(&ready_list);
+		struct list_elem* next = max_thread_priority(&ready_list);
+		list_remove(next);
+		return list_entry(next, struct thread, elem);
 	}
 }
 
 // input: thread list , output: max priority thread of the given list
-struct thread *
+struct list_elem*
 max_thread_priority(struct list* list){
 	struct list_elem *i_ready;
-	struct list_elem *max_prio_ready;
-	int max_ready_priority = 0;
-
+	struct list_elem *thread_max;
+	
 	ASSERT (!list_empty(list));
 
-	max_prio_ready = list_begin(list);
+	i_ready = list_begin(list);
+	thread_max = i_ready;
+	int max_priority = -99;
 
-	for (i_ready = list_begin(list); i_ready != list_back(list); i_ready = list_next(i_ready)){
-		if( max_ready_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
-			max_prio_ready = i_ready;
+	for (i_ready = list_begin(list); i_ready != list_end(list); i_ready = list_next(i_ready)){
+		if (max_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
+			max_priority = thread_get_modified_priority(list_entry(i_ready, struct thread, elem));
+			thread_max = i_ready;
 		}
 	}
 
-	return list_entry (max_prio_ready, struct thread, elem);
+	return thread_max;
 }
 
 /* Use iretq to launch the thread */

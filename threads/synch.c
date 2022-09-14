@@ -66,6 +66,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
+		// printf("%s waits sema to be up.\n", thread_current()->name);
 		list_push_back (&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
@@ -105,17 +106,42 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
+	bool need_schedule = false;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+
+	/*
+	If there is waiter, unblock.
+	*/
 	if (!list_empty (&sema->waiters)){
-		struct thread *highest_waiter = max_thread_priority(&sema->waiters);
+		struct thread *highest_waiter = list_entry(max_thread_priority(&sema->waiters), struct thread, elem);
+		struct list_elem *i;
+		struct thread *curr = thread_current();
+
+		/*
+		Remove thread that has highest priority among semphore waiter. 
+		Remove donation occured by prior waiter.
+		Then unblocks it, which can invoke schedule.
+		*/
 		list_remove(&highest_waiter->elem);
-		thread_unblock (highest_waiter);
+		
+		if (!list_empty(&curr->donated_priority)){
+			for (i=list_begin(&curr->donated_priority); i != list_end(&curr->donated_priority); i = list_next(i)){
+				if (list_entry(i, struct donated_priority, elem)->donater == highest_waiter) break;
+			}
+			list_remove(i);
+		}
+
+		printf("Unblock %s while sema up.\n", highest_waiter->name);
+		need_schedule = thread_unblock (highest_waiter);
+		if (intr_context()) need_schedule = false;
 	}
+
 	sema->value++;
 	intr_set_level (old_level);
+	if (need_schedule) thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -195,13 +221,9 @@ lock_acquire (struct lock *lock) {
 		new_donation.donater = thread_current ();
 		new_donation.priority = thread_get_priority();
 		list_push_back(&lock->holder->donated_priority, &new_donation.elem);
-
-		sema_down (&lock->semaphore);
-		list_remove(&new_donation.elem);
-
 	}
-	else sema_down (&lock->semaphore);
 	
+	sema_down (&lock->semaphore);
 	
 	lock->holder = thread_current ();
 }
