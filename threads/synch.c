@@ -133,12 +133,9 @@ sema_up (struct semaphore *sema) {
 			for (i=list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
 				if (list_entry(i, struct donation, elem)->sema == sema) break;
 			}
-			
-			if (!list_empty(&sema->waiters)){
-				list_entry(i, struct donation, elem)->highest_pri = thread_get_modified_priority(max_thread_priority(&list_entry(i, struct donation, elem)->sema->waiters));
-			}
-
 			list_remove(i);
+			
+			free(list_entry(i, struct donation, elem));
 		}
 
 		// printf("Unblock %s while sema up.\n", highest_waiter->name);
@@ -231,7 +228,7 @@ lock_acquire (struct lock *lock) {
 
 		curr->waiting.sema = &lock->semaphore;
 		curr->waiting.tid = lock->holder->tid;
-		
+
 		thread_recalc_modified_priority(curr);
 	}
 	intr_set_level(old_level);

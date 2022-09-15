@@ -422,18 +422,26 @@ thread_yield (void) {
 void
 thread_recalc_modified_priority(struct thread *t) {
 	if (t->waiting.tid == -1) {
-		return;
+		struct thread *donater = t;
 	}
 	else {
 		struct list_elem *i;
 		struct thread *donatee;
 		//Find donatee with tid;
 
-
-		for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
-			if (list_entry(i, struct thread, elem_blocked)->tid == t->waiting.tid){
-				donatee = list_entry(i, struct thread, elem_blocked);
+		for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+			if (list_entry(i, struct thread, elem)->tid == t->waiting.tid){
+				donatee = list_entry(i, struct thread, elem);
 				break;
+			}
+		}
+		if (i == list_end(&ready_list)){
+			i = NULL;
+			for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+				if (list_entry(i, struct thread, elem_blocked)->tid == t->waiting.tid){
+					donatee = list_entry(i, struct thread, elem_blocked);
+					break;
+				}
 			}
 		}
 		
@@ -452,10 +460,10 @@ thread_recalc_modified_priority(struct thread *t) {
 		}
 		// If this donation is new for this sema.
 		if (i == list_end(&donatee->donations)){
-			struct donation new_donation;
-			new_donation.highest_pri = donating_pri;
-			new_donation.sema = t->waiting.sema;
-			list_push_back(&donatee->donations, &new_donation.elem);
+			struct donation *new_donation = malloc(sizeof(struct donation));
+			new_donation->highest_pri = donating_pri;
+			new_donation->sema = t->waiting.sema;
+			list_push_back(&donatee->donations, &new_donation->elem);
 		}
 
 		thread_recalc_modified_priority(donatee);
@@ -465,7 +473,6 @@ thread_recalc_modified_priority(struct thread *t) {
 
 int
 thread_get_modified_priority (struct thread *t) {
-	struct thread *t_ = t;
 	int highest = t->priority;
 	if (list_empty(&t->donations)) {
 		return highest;
