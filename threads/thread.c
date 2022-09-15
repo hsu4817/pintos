@@ -475,6 +475,9 @@ thread_recalc_modified_priority(struct thread *t) {
 
 int
 thread_get_modified_priority (struct thread *t) {
+	if (thread_mlfqs) {
+		return t->priority;
+	}
 	int highest = t->priority;
 	if (list_empty(&t->donations)) {
 		return highest;
