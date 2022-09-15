@@ -41,6 +41,10 @@ static struct lock tid_lock;
 /* Thread destruction requests */
 static struct list destruction_req;
 
+/* List of processes in THREAD_BLOCKED state */
+static struct list blocked_list;
+
+
 /* List for thread sleep */
 struct timer_sema {
 	struct semaphore *sema;
@@ -75,6 +79,24 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+
+/* Initializes blocked list. */
+void 
+blocked_list_init(void) {
+	list_init(&blocked_list);
+}
+
+/* Add thread to blocked list */
+void
+blocked_list_add(struct list_elem *elem_blocked) {
+	list_push_back(&blocked_list, elem_blocked);
+}
+
+/* Remove thread to blocked list */
+void
+blocked_list_remove(struct list_elem *elem_blocked) {
+	list_remove(elem_blocked);
+}
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -122,11 +144,13 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	blocked_list_init();
 	list_init(&timer_semas);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);
+
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid ();
 }
@@ -239,7 +263,8 @@ thread_create (const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
-
+	
+	blocked_list_add(&t->elem_blocked);
 	/* Add to run queue. */
 	if (thread_unblock (t)) thread_yield();
 
@@ -256,6 +281,7 @@ void
 thread_block (void) {
 	ASSERT (!intr_context ());
 	ASSERT (intr_get_level () == INTR_OFF);
+	blocked_list_add(&thread_current()->elem_blocked);
 	thread_current ()->status = THREAD_BLOCKED;
 	schedule ();
 }
@@ -277,9 +303,11 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	
+
+	blocked_list_remove (&t->elem_blocked);
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
+	
 	/*
 	printf("Now unblocked %s.\n",t->name);
 	printf("P of unblocking thread %s : %d.\n",t->name, thread_get_modified_priority(t));
@@ -390,6 +418,59 @@ thread_yield (void) {
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
+
+void
+thread_recalc_modified_priority(struct thread *t) {
+	if (t->waiting.tid == -1) {
+		struct thread *donater = t;
+	}
+	else {
+		struct list_elem *i;
+		struct thread *donatee;
+		//Find donatee with tid;
+
+		for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+			if (list_entry(i, struct thread, elem)->tid == t->waiting.tid){
+				donatee = list_entry(i, struct thread, elem);
+				break;
+			}
+		}
+		if (i == list_end(&ready_list)){
+			i = NULL;
+			for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+				if (list_entry(i, struct thread, elem_blocked)->tid == t->waiting.tid){
+					donatee = list_entry(i, struct thread, elem_blocked);
+					break;
+				}
+			}
+		}
+		
+		ASSERT (i != list_end(&blocked_list));
+		
+		int donating_pri = thread_get_modified_priority(t);
+		for (i = list_begin(&donatee->donations); i != list_end(&donatee->donations); i = list_next(i)){
+			// Check if donatee already has donation for this sema.
+			if (list_entry(i, struct donation, elem)->sema == t->waiting.sema){
+				// If current thread has higher priority than overall priority donation of this semaphore, change it. 
+				if (list_entry(i, struct donation, elem)->highest_pri < donating_pri) {
+					list_entry(i, struct donation, elem)->highest_pri = donating_pri;
+				}
+				break;
+			}
+		}
+		// If this donation is new for this sema.
+		if (i == list_end(&donatee->donations)){
+			struct donation *new_donation = malloc(sizeof(struct donation));
+			new_donation->highest_pri = donating_pri;
+			new_donation->sema = t->waiting.sema;
+			list_push_back(&donatee->donations, &new_donation->elem);
+		}
+
+		thread_recalc_modified_priority(donatee);
+	}
+}
+
+
 int
 thread_get_modified_priority (struct thread *t) {
 	int highest = t->priority;
@@ -541,6 +622,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->waiting.tid = -1;
+	t->waiting.sema = NULL;
+
 	list_init(&t->donations);
 }
 

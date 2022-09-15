@@ -4,11 +4,19 @@
 #include <list.h>
 #include <stdbool.h>
 
+#define DONATE_CHAIN_MAX 8
+
 /* A counting semaphore. */
 struct semaphore {
 	unsigned value;             /* Current value. */
 	struct list waiters;        /* List of waiting threads. */
 
+	struct list_elem elem;
+};
+struct donation {
+	struct semaphore *sema;
+	int highest_pri;
+	
 	struct list_elem elem;
 };
 

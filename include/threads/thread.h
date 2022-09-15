@@ -86,11 +86,10 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
-struct donation {
+
+struct waiting_tid {
+	tid_t tid;
 	struct semaphore *sema;
-	int highest_pri;
-	
-	struct list_elem elem;
 };
 
 struct thread {
@@ -99,10 +98,12 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	struct list donations;				/* Donated_priority. */
-
+	
 	/* Shared between thread.c and synch.c. */
+	struct list donations;				/* Donated_priority. */
+	struct waiting_tid waiting;			/* Locked with this */
 	struct list_elem elem;              /* List element. */
+	struct list_elem elem_blocked;		/* List element for blocked list */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -122,7 +123,9 @@ struct thread {
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
-
+void blocked_list_init(void);
+void blocked_list_add(struct list_elem *elem_blocked);
+void blocked_list_remove(struct list_elem *elem_blocked);
 void thread_init (void);
 void thread_start (void);
 
@@ -143,7 +146,8 @@ void thread_exit (void) NO_RETURN;
 void thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks);
 void thread_yield (void);
 
-int thread_get_modified_priority (struct thread*);
+void thread_recalc_modified_priority(struct thread *t);
+int thread_get_modified_priority (struct thread* t);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
