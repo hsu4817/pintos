@@ -98,6 +98,8 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int recent_cpu;						/* Recent cpu. */
+	int nice;							/* Nice value */
 	
 	/* Shared between thread.c and synch.c. */
 	struct list donations;				/* Donated_priority. */
