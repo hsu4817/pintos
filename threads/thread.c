@@ -418,7 +418,14 @@ thread_set_priority (int new_priority) {
 	
 }
 
+
 /* Returns the current thread's priority. */
+
+//recent_cpu, load_avg are maintained as multiplied by f
+//Only when getting gives rounded value
+
+ int f = (1<<14);
+
 int
 thread_get_priority (void) {
 	return thread_get_modified_priority(thread_current());
@@ -428,27 +435,48 @@ thread_get_priority (void) {
 void
 thread_set_nice (int nice UNUSED) {
 	/* TODO: Your implementation goes here */
+	thread_current()->nice = nice;
+
+	//recalculate recent_cpu
+	thread_get_recent_cpu();
+
+	int new_prio = PRI_MAX*f - (thread_current()->recent_cpu/4) - (nice*2)*f;
+
+	thread_current()->priority = (new_prio +f/2)/f;
+
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) {
 	/* TODO: Your implementation goes here */
-	return 0;
+	return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) {
 	/* TODO: Your implementation goes here */
-	return 0;
+
+	load_avg = ( (59/60)*load_avg + (1/60)*list_size(&ready_list) )*f;
+
+	return ((load_avg*100 + f/2)/f);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
-	return 0;
+
+	//recalculate load_avg
+	thread_get_load_avg();
+
+	//calculate recent_cpu
+	thread_current()->recent_cpu = ( (2*load_avg)/(2*load_avg+1)*(thread_current()->recent_cpu) + thread_get_nice()*f );
+
+	//rounding
+	if(thread_current()->recent_cpu >=0) return (thread_current()->recent_cpu*100 + f/2)/f;
+	else return (thread_current()->recent_cpu*100 - f/2)/f;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
