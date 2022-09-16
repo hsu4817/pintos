@@ -67,6 +67,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 int load_avg = 0;
 int f = (1<<14);
+int load_avg_called = 0;
  
 
 /* If false (default), use round-robin scheduler.
@@ -213,16 +214,19 @@ thread_tick (void) {
 	
 	//mlfqs load_avg recount
 
+	load_avg_called = 0;
+
 	if(thread_mlfqs){
 		if(timer_ticks() != 0){
 				if(timer_ticks() % TIMER_FREQ == 0) {
-					thread_get_load_avg();
+					if(load_avg_called == 0){
+						thread_get_load_avg();
+					}
 					thread_get_recent_cpu();
 			}
 		}
 
 	}
-
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
@@ -573,6 +577,12 @@ thread_get_load_avg (void) {
 
 	//enum intr_level old_level = intr_disable();
 
+	if(load_avg_called == 1){
+		return ((load_avg*100 + f/2)/f);
+	}
+
+	load_avg_called = 1;
+
 	if(timer_ticks() == before_tick){
 		return ((load_avg*100 + f/2)/f);
 	}
@@ -588,7 +598,7 @@ thread_get_load_avg (void) {
 	}
 
 	//intr_set_level(old_level);
-	printf("%d ", timer_ticks());
+	//printf("%d ", timer_ticks());
 	before_tick = timer_ticks();
 
 	return ((load_avg*100 + f/2)/f);
