@@ -231,29 +231,32 @@ thread_tick (void) {
 			}
 
 			if(recent_avg_called == 0){
-				thread_set_recent_all();
+				if(thread_current()->tid != idle_thread->tid){
+					thread_set_recent_all();
+				}
 			}
+		}
 
+		//priority calculation for all threads
 
-			/*
-			if(recent_avg_called == 0){
-				thread_set_recent_cpu(thread_current());
+		if(timer_ticks() % 4 == 0){
 
+			if(thread_current()->tid != idle_thread->tid){
 				struct list_elem *i;
 				if(!list_empty(&ready_list)){
 					for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
-						thread_set_recent_cpu(list_entry(i, struct thread, elem));
+						thread_set_priority_mlfqs(list_entry(i, struct thread, elem));
 					}
 				}
 
 				if(!list_empty(&blocked_list)){
 					for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
-						thread_set_recent_cpu(list_entry(i, struct thread, elem_blocked));
+						thread_set_priority_mlfqs(list_entry(i, struct thread, elem_blocked));
 					}
 				}
 			}
-			*/
 		}
+
 
 	}
 	/* Enforce preemption. */
@@ -550,9 +553,25 @@ thread_set_priority (int new_priority) {
 			}	
 		}
 	}
+	else{
 
+		thread_set_priority_mlfqs(thread_current());
 
-	
+		if (!list_empty(&ready_list)){
+			if(new_priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
+			thread_yield();
+			}	
+		}
+
+	}
+}
+
+void
+thread_set_priority_mlfqs(struct thread* thread_for_set){
+
+	int prio = PRI_MAX*f - (thread_current()->recent_cpu/4) - (thread_for_set->nice*2)*f;
+	thread_for_set->priority = (prio + f/2)/f;
+
 }
 
 
@@ -574,9 +593,6 @@ void
 thread_set_nice (int nice UNUSED) {
 	/* TODO: Your implementation goes here */
 	thread_current()->nice = nice;
-
-	//recalculate recent_cpu
-	thread_set_recent_cpu(thread_current()->tid);
 
 	int new_prio = PRI_MAX*f - (thread_current()->recent_cpu/4) - (nice*2)*f;
 
