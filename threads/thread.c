@@ -221,7 +221,7 @@ thread_tick (void) {
 	if(thread_mlfqs){
 
 		if(t != idle_thread){
-			thread_current()->recent_cpu = thread_current()->recent_cpu + f;
+			thread_current()->recent_cpu = thread_current()->recent_cpu + 1;
 		}
 
 
