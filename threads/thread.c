@@ -68,6 +68,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 int load_avg = 0;
 int f = (1<<14);
 int load_avg_called = 0;
+int recent_avg_called = 0;
  
 
 /* If false (default), use round-robin scheduler.
@@ -212,23 +213,51 @@ thread_tick (void) {
 		intr_set_level(old_level);
 	}
 	
-	//mlfqs load_avg recount
+	//mlfqs load_avg, recent_avg recount
 
 	load_avg_called = 0;
+	recent_avg_called = 0;
 
 	if(thread_mlfqs){
-		if(timer_ticks() != 0){
-				if(timer_ticks() % TIMER_FREQ == 0) {
-					if(load_avg_called == 0){
-						thread_get_load_avg();
-					}
-					thread_get_recent_cpu();
+
+		if(thread_current()->tid != idle_thread->tid){
+			thread_current()->recent_cpu += f;
+		}	
+
+
+		if(timer_ticks() % TIMER_FREQ == 0) {
+			if(load_avg_called == 0){
+				thread_set_load_avg();
 			}
+
+			if(recent_avg_called == 0){
+				thread_set_recent_all();
+			}
+
+
+			/*
+			if(recent_avg_called == 0){
+				thread_set_recent_cpu(thread_current());
+
+				struct list_elem *i;
+				if(!list_empty(&ready_list)){
+					for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+						thread_set_recent_cpu(list_entry(i, struct thread, elem));
+					}
+				}
+
+				if(!list_empty(&blocked_list)){
+					for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+						thread_set_recent_cpu(list_entry(i, struct thread, elem_blocked));
+					}
+				}
+			}
+			*/
 		}
 
 	}
 	/* Enforce preemption. */
-	if (++thread_ticks >= TIME_SLICE)
+		if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
 }
 
@@ -547,7 +576,7 @@ thread_set_nice (int nice UNUSED) {
 	thread_current()->nice = nice;
 
 	//recalculate recent_cpu
-	thread_get_recent_cpu();
+	thread_set_recent_cpu(thread_current()->tid);
 
 	int new_prio = PRI_MAX*f - (thread_current()->recent_cpu/4) - (nice*2)*f;
 
@@ -570,49 +599,91 @@ thread_get_nice (void) {
 
 /* Returns 100 times the system load average. */
 
-int
-thread_get_load_avg (void) {
+void
+thread_set_load_avg (void) {
 	/* TODO: Your implementation goes here */
 
 	//enum intr_level old_level = intr_disable();
 
-	if(load_avg_called == 1){
-		return ((load_avg*100 + f/2)/f);
-	}
+	if(load_avg_called != 1){
+		if(timer_ticks() % TIMER_FREQ == 0){
+			if(thread_current()->tid == idle_thread->tid){
+					load_avg = 59*load_avg/60 + (list_size(&ready_list))*f/60;
+			}
+			else{
+				load_avg = 59*load_avg/60 + (list_size(&ready_list)+1)*f/60;
+			}
 
-	load_avg_called = 1;
-
-
-	if(timer_ticks() % TIMER_FREQ == 0){
-		if(thread_current()->tid == idle_thread->tid){
-				load_avg = 59*load_avg/60 + (list_size(&ready_list))*f/60;
 		}
-		else{
-			load_avg = 59*load_avg/60 + (list_size(&ready_list)+1)*f/60;
-		}
-
 	}
-
 	//intr_set_level(old_level);
 	//printf("%d ", timer_ticks());
+	load_avg_called = 1;
+}
 
+
+int
+thread_get_load_avg (void) {
+	/* TODO: Your implementation goes here */
 	return ((load_avg*100 + f/2)/f);
 }
 
+
+
 /* Returns 100 times the current thread's recent_cpu value. */
-int
-thread_get_recent_cpu (void) {
+void
+thread_set_recent_all(){
+
+	thread_set_recent_cpu(thread_current());
+
+	struct list_elem *i;
+	if(!list_empty(&ready_list)){
+		for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+			thread_set_recent_cpu(list_entry(i, struct thread, elem));
+		}
+	}
+
+	if(!list_empty(&blocked_list)){
+		for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+			thread_set_recent_cpu(list_entry(i, struct thread, elem_blocked));
+		}
+	}
+
+	recent_avg_called = 1;
+
+}
+
+
+void
+thread_set_recent_cpu (struct thread* thread_for_set) {
 	/* TODO: Your implementation goes here */
 
 	//recalculate load_avg
 	//thread_get_load_avg();
 
-	//calculate recent_cpu
-	thread_current()->recent_cpu = ( (2*load_avg)/(2*load_avg+1)*(thread_current()->recent_cpu) + thread_get_nice()*f );
+	int recent_cpu_for_set = thread_for_set->recent_cpu;
+
+	if(recent_avg_called == 0){
+
+		if(timer_ticks() % TIMER_FREQ == 0){
+			//calculate recent_cpu
+			recent_cpu_for_set = ( (2*load_avg)/(2*load_avg+1)*(recent_cpu_for_set) + thread_for_set->nice*f );
+		}
+	}
+
+	thread_for_set->recent_cpu = recent_cpu_for_set;
+
+}
+
+
+int
+thread_get_recent_cpu (void) {
+	/* TODO: Your implementation goes here */
 
 	//rounding
 	if(thread_current()->recent_cpu >=0) return (thread_current()->recent_cpu*100 + f/2)/f;
 	else return (thread_current()->recent_cpu*100 - f/2)/f;
+
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
