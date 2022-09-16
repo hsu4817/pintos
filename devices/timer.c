@@ -92,13 +92,9 @@ void
 timer_sleep (int64_t ticks) {
 	ASSERT (intr_get_level () == INTR_ON);
 
-	struct semaphore time_elapsed;
-	sema_init (&time_elapsed, 0);
-
+	thread_current()->sleep = ticks;
+	thread_sleep_yield();
 	
-	thread_sleep_yield(&time_elapsed, ticks);
-
-	sema_down(&time_elapsed);
 }
 
 /* Suspends execution for approximately MS milliseconds. */

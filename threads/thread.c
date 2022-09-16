@@ -44,16 +44,8 @@ static struct list destruction_req;
 /* List of processes in THREAD_BLOCKED state */
 static struct list blocked_list;
 
-
-/* List for thread sleep */
-struct timer_sema {
-	struct semaphore *sema;
-	int64_t ticks;
-
-	struct list_elem elem;
-};
-
-static struct list timer_semas;
+/* List of sleeping threads */
+static struct list sleeping_list;
 
 
 /* Statistics. */
@@ -81,23 +73,6 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
-/* Initializes blocked list. */
-void 
-blocked_list_init(void) {
-	list_init(&blocked_list);
-}
-
-/* Add thread to blocked list */
-void
-blocked_list_add(struct list_elem *elem_blocked) {
-	list_push_back(&blocked_list, elem_blocked);
-}
-
-/* Remove thread to blocked list */
-void
-blocked_list_remove(struct list_elem *elem_blocked) {
-	list_remove(elem_blocked);
-}
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -145,8 +120,8 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-	blocked_list_init();
-	list_init(&timer_semas);
+	list_init(&blocked_list);
+	list_init(&sleeping_list);
 	load_avg = 0;
 
 	/* Set up a thread structure for the running thread. */
@@ -190,22 +165,20 @@ thread_tick (void) {
 		kernel_ticks++;
 
 
-	if (!list_empty(&timer_semas)){
+	if (!list_empty(&sleeping_list)){
 		enum intr_level old_level;
 		old_level = intr_disable();
 		struct list_elem *i;
-		
-		int fucking_wakeup_count = 0;
-		for (i = list_begin(&timer_semas);i != list_end(&timer_semas);i = list_next(i)){
-			if (--(list_entry(i, struct timer_sema, elem)->ticks) <= 0) {
-				
-				fucking_wakeup_count++;
+		for (i = list_begin(&sleeping_list); i != list_end(&sleeping_list); i = list_next(i)){
+			list_entry(i, struct thread, elem_sleep)->sleep--;
+			if (list_entry(i, struct thread, elem_sleep) <= 0){
+				thread_unblock(list_entry(i, struct thread, elem_sleep));
+				list_remove(i);
+				i = list_prev(i);
+				intr_yield_on_return ();
 			}
 		}
-		for (int _ = 0; _ < fucking_wakeup_count; _++){
-			sema_up(list_entry(list_pop_front(&timer_semas), struct timer_sema, elem)->sema);
-			intr_yield_on_return ();
-		}
+
 		intr_set_level(old_level);
 	}
 	
@@ -266,9 +239,10 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 	
-	blocked_list_add(&t->elem_blocked);
+	list_push_back(&blocked_list, &t->elem_blocked);
 	/* Add to run queue. */
-	if (thread_unblock (t)) thread_yield();
+	thread_unblock (t);
+	thread_yield();
 
 	return tid;
 }
@@ -283,7 +257,7 @@ void
 thread_block (void) {
 	ASSERT (!intr_context ());
 	ASSERT (intr_get_level () == INTR_OFF);
-	blocked_list_add(&thread_current()->elem_blocked);
+	list_push_back(&blocked_list, &thread_current()->elem_blocked);
 	thread_current ()->status = THREAD_BLOCKED;
 	schedule ();
 }
@@ -296,43 +270,19 @@ thread_block (void) {
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
-bool
+void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
-	bool schedule_require = false;
 
 	ASSERT (is_thread (t));
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-
-	blocked_list_remove (&t->elem_blocked);
+	list_remove(&t->elem_blocked);
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
 	
-	/*
-	printf("Now unblocked %s.\n",t->name);
-	printf("P of unblocking thread %s : %d.\n",t->name, thread_get_modified_priority(t));
-	printf("P of current thread %s : %d.\n",thread_current()->name, thread_get_modified_priority(thread_current()));
-	*/
-	if (thread_get_modified_priority(t) > thread_get_modified_priority(thread_current())){
-		
-		// printf ("Unblock invoked schdule.\n");
-		
-		schedule_require = true;
-	}
-
-	/*
-	printf ("Ready threads : ");
-	struct list_elem *i;
-	for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
-		printf ("%s || ", list_entry(i, struct thread, elem)->name);
-	}
-	printf ("\n");
-	*/
-
 	intr_set_level (old_level);
-	return schedule_require;
 }
 
 /* Returns the name of the running thread. */
@@ -385,23 +335,15 @@ thread_exit (void) {
 
 /* Yields the CPU when current thread is put to sleep. */
 void
-thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks) {
+thread_sleep_yield () {
 	enum intr_level old_level;
 
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable();
-	struct timer_sema *new_sema = malloc(sizeof(struct timer_sema));
+	list_push_back(&sleeping_list, &thread_current()->elem_sleep);
+	thread_block();
 
-	new_sema->sema = ticks_sema;
-	new_sema->ticks = ticks;
-
-	bool tick_less (const struct list_elem *a, const struct list_elem *b);
-	struct list_elem *i; 
-	for (i = list_begin(&timer_semas); i != list_end(&timer_semas); i = list_next(i)){
-		if (ticks < list_entry(i, struct timer_sema, elem)->ticks)break;	
-	}
-	list_insert(i, &new_sema->elem);
 	intr_set_level (old_level);
 }
 
@@ -421,74 +363,78 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
-void
-thread_recalc_modified_priority(struct thread *t) {
-	if (t->waiting.tid == -1) {
-		struct thread *donater = t;
-	}
-	else {
-		struct list_elem *i;
-		struct thread *donatee;
-		//Find donatee with tid;
 
-		for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
-			if (list_entry(i, struct thread, elem)->tid == t->waiting.tid){
-				donatee = list_entry(i, struct thread, elem);
-				break;
-			}
-		}
-		if (i == list_end(&ready_list)){
-			i = NULL;
-			for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
-				if (list_entry(i, struct thread, elem_blocked)->tid == t->waiting.tid){
-					donatee = list_entry(i, struct thread, elem_blocked);
-					break;
-				}
-			}
-		}
-		
-		ASSERT (i != list_end(&blocked_list));
-		
-		int donating_pri = thread_get_modified_priority(t);
-		for (i = list_begin(&donatee->donations); i != list_end(&donatee->donations); i = list_next(i)){
-			// Check if donatee already has donation for this sema.
-			if (list_entry(i, struct donation, elem)->sema == t->waiting.sema){
-				// If current thread has higher priority than overall priority donation of this semaphore, change it. 
-				if (list_entry(i, struct donation, elem)->highest_pri < donating_pri) {
-					list_entry(i, struct donation, elem)->highest_pri = donating_pri;
-				}
-				break;
-			}
-		}
-		// If this donation is new for this sema.
-		if (i == list_end(&donatee->donations)){
-			struct donation *new_donation = malloc(sizeof(struct donation));
-			new_donation->highest_pri = donating_pri;
-			new_donation->sema = t->waiting.sema;
-			list_push_back(&donatee->donations, &new_donation->elem);
-		}
+void make_donation(){
+	struct thread *curr = thread_current();
+	struct thread *donatee = curr->waiting->holder;
+	
+	list_push_back(&donatee->donations, &curr->elem_donation);
+}
 
-		thread_recalc_modified_priority(donatee);
+
+void remove_donation(struct lock *lock){
+	struct thread *curr = thread_current();
+	struct list_elem *i;
+	ASSERT(!list_empty(&curr->donations));
+
+	for (i = list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
+		// i is donation
+		
+		if (lock == list_entry(i, struct thread, elem_donation)->waiting){
+			struct list_elem *temp = i;
+			i = list_prev(i);
+			list_remove(temp);
+		}
 	}
 }
 
+void
+thread_recalc_modified_priority(struct thread *t) {
+	struct thread *curr = t;
+	int highest_priority = 0;
+
+	/* Calculate modified priority of this thread considering donated priorities. 
+	   If this thread is waiting for some lock, reculsivly calculate for the holder of the lock. */
+	if (list_empty(&curr->donations)){
+		return;
+	}
+	else{
+		struct list_elem *i;
+
+		for (i = list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
+			struct thread *temp_donater=list_entry(i, struct thread, elem_donation);
+			// Reculsive call
+			thread_recalc_modified_priority(temp_donater);
+			if (highest_priority < thread_get_modified_priority(temp_donater)) highest_priority = thread_get_modified_priority(temp_donater);
+		}
+		curr->donated_priority = highest_priority;
+	}
+}
+
+void
+recalc_modified_priority_all(){
+	struct list_elem *i;
+	for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+		thread_recalc_modified_priority(list_entry(i, struct thread, elem));
+	}
+	for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+		thread_recalc_modified_priority(list_entry(i, struct thread, elem_blocked));
+	}
+}
 
 int
 thread_get_modified_priority (struct thread *t) {
 	if (thread_mlfqs) {
 		return t->priority;
 	}
-	int highest = t->priority;
-	if (list_empty(&t->donations)) {
-		return highest;
+
+	if (t->donated_priority >= t->priority){
+		return t->donated_priority;
 	}
 	else{
-		struct list_elem *i;
-		for (i = list_begin(&t->donations); i != list_end(&t->donations); i = list_next(i)){
-			if (list_entry(i, struct donation, elem)->highest_pri > highest) highest = list_entry(i, struct donation, elem)->highest_pri;
-		}
-		return highest;
+		return t->priority;
 	}
+	
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -497,11 +443,8 @@ thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
 
 	if (!list_empty(&ready_list)){
-		if(new_priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
 		thread_yield();
-		}	
 	}
-	
 }
 
 
@@ -626,9 +569,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->donated_priority = 0;
 	t->magic = THREAD_MAGIC;
-	t->waiting.tid = -1;
-	t->waiting.sema = NULL;
+	t->waiting = NULL;
 
 	list_init(&t->donations);
 }
@@ -644,32 +587,21 @@ next_thread_to_run (void) {
 		return idle_thread;
 	}
 	else {
-		struct thread* next = max_thread_priority(&ready_list);
+		struct thread* next = list_entry(list_max(&ready_list, less_priority, NULL), struct thread, elem);
 		list_remove(&next->elem);
 		return next;
 	}
 }
 
 // input: thread list , output: max priority thread of the given list
-struct thread*
-max_thread_priority(struct list* list){
-	struct list_elem *i_ready;
-	struct list_elem *thread_max;
-	
-	ASSERT (!list_empty(list));
 
-	i_ready = list_begin(list);
-	thread_max = i_ready;
-	int max_priority = -99;
-
-	for (i_ready = list_begin(list); i_ready != list_end(list); i_ready = list_next(i_ready)){
-		if (max_priority < thread_get_modified_priority(list_entry(i_ready, struct thread, elem))){
-			max_priority = thread_get_modified_priority(list_entry(i_ready, struct thread, elem));
-			thread_max = i_ready;
-		}
+bool
+less_priority (const struct list_elem *a, const struct list_elem *b, void *aux){
+	if (thread_get_modified_priority(list_entry(a, struct thread, elem))
+	< thread_get_modified_priority(list_entry(b, struct thread, elem))){
+		return true;
 	}
-
-	return list_entry(thread_max, struct thread, elem);
+	else return false;
 }
 
 /* Use iretq to launch the thread */
