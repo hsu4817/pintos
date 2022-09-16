@@ -220,9 +220,9 @@ thread_tick (void) {
 
 	if(thread_mlfqs){
 
-		if(thread_current()->tid != idle_thread->tid){
-			thread_current()->recent_cpu += f;
-		}	
+		if(t != idle_thread){
+			thread_current()->recent_cpu = thread_current()->recent_cpu + f;
+		}
 
 
 		if(timer_ticks() % TIMER_FREQ == 0) {
@@ -230,8 +230,8 @@ thread_tick (void) {
 				thread_set_load_avg();
 			}
 
-			if(recent_avg_called == 0){
-				if(thread_current()->tid != idle_thread->tid){
+			if(t != idle_thread){	
+				if(recent_avg_called == 0){
 					thread_set_recent_all();
 				}
 			}
@@ -239,24 +239,36 @@ thread_tick (void) {
 
 		//priority calculation for all threads
 
-		if(timer_ticks() % 4 == 0){
+			if(timer_ticks() % 4 == 0){
 
-			if(thread_current()->tid != idle_thread->tid){
-				struct list_elem *i;
-				if(!list_empty(&ready_list)){
-					for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
-						thread_set_priority_mlfqs(list_entry(i, struct thread, elem));
+				if(t != idle_thread){
+					struct list_elem *i;
+
+					if(!list_empty(&ready_list)){
+
+						for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+							thread_set_priority_mlfqs(list_entry(i, struct thread, elem));
+
+							if(i == list_next(i)){
+									break;
+							}
+
+						}
 					}
-				}
+					
+					
+					if(!list_empty(&blocked_list)){
 
-				if(!list_empty(&blocked_list)){
-					for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
-						thread_set_priority_mlfqs(list_entry(i, struct thread, elem_blocked));
+						for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+							thread_set_priority_mlfqs(list_entry(i, struct thread, elem_blocked));
+
+							if(i == list_next(i)){
+									break;
+							}
+						}
 					}
 				}
 			}
-		}
-
 
 	}
 	/* Enforce preemption. */
@@ -569,7 +581,7 @@ thread_set_priority (int new_priority) {
 void
 thread_set_priority_mlfqs(struct thread* thread_for_set){
 
-	int prio = PRI_MAX*f - (thread_current()->recent_cpu/4) - (thread_for_set->nice*2)*f;
+	int prio = PRI_MAX*f - (thread_for_set->recent_cpu/4) - (thread_for_set->nice*2)*f;
 	thread_for_set->priority = (prio + f/2)/f;
 
 }
@@ -621,15 +633,12 @@ thread_set_load_avg (void) {
 
 	//enum intr_level old_level = intr_disable();
 
-	if(load_avg_called != 1){
-		if(timer_ticks() % TIMER_FREQ == 0){
-			if(thread_current()->tid == idle_thread->tid){
-					load_avg = 59*load_avg/60 + (list_size(&ready_list))*f/60;
-			}
-			else{
-				load_avg = 59*load_avg/60 + (list_size(&ready_list)+1)*f/60;
-			}
-
+	if(load_avg_called == 0){
+		if(thread_current()->tid == idle_thread->tid){
+				load_avg = 59*load_avg/60 + (list_size(&ready_list))*f/60;
+		}
+		else{
+			load_avg = 59*load_avg/60 + (list_size(&ready_list)+1)*f/60;
 		}
 	}
 	//intr_set_level(old_level);
@@ -653,15 +662,28 @@ thread_set_recent_all(){
 	thread_set_recent_cpu(thread_current());
 
 	struct list_elem *i;
+
 	if(!list_empty(&ready_list)){
+
+
 		for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
 			thread_set_recent_cpu(list_entry(i, struct thread, elem));
+
+			if(i == list_next(i)){
+					break;
+			}
 		}
 	}
 
 	if(!list_empty(&blocked_list)){
+
+
 		for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
 			thread_set_recent_cpu(list_entry(i, struct thread, elem_blocked));
+
+			if(i == list_next(i)){
+					break;
+			}
 		}
 	}
 
@@ -680,11 +702,8 @@ thread_set_recent_cpu (struct thread* thread_for_set) {
 	int recent_cpu_for_set = thread_for_set->recent_cpu;
 
 	if(recent_avg_called == 0){
-
-		if(timer_ticks() % TIMER_FREQ == 0){
-			//calculate recent_cpu
-			recent_cpu_for_set = ( (2*load_avg)/(2*load_avg+1)*(recent_cpu_for_set) + thread_for_set->nice*f );
-		}
+		//calculate recent_cpu
+		recent_cpu_for_set = ( (recent_cpu_for_set)/(2*load_avg+1)*(2*load_avg) + thread_for_set->nice*f );
 	}
 
 	thread_for_set->recent_cpu = recent_cpu_for_set;
