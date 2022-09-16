@@ -171,7 +171,7 @@ thread_tick (void) {
 		struct list_elem *i;
 		for (i = list_begin(&sleeping_list); i != list_end(&sleeping_list); i = list_next(i)){
 			list_entry(i, struct thread, elem_sleep)->sleep--;
-			if (list_entry(i, struct thread, elem_sleep) <= 0){
+			if (list_entry(i, struct thread, elem_sleep)->sleep <= 0){
 				thread_unblock(list_entry(i, struct thread, elem_sleep));
 				list_remove(i);
 				i = list_prev(i);
@@ -281,7 +281,6 @@ thread_unblock (struct thread *t) {
 	list_remove(&t->elem_blocked);
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
-	
 	intr_set_level (old_level);
 }
 
@@ -396,7 +395,7 @@ thread_recalc_modified_priority(struct thread *t) {
 	/* Calculate modified priority of this thread considering donated priorities. 
 	   If this thread is waiting for some lock, reculsivly calculate for the holder of the lock. */
 	if (list_empty(&curr->donations)){
-		return;
+		curr->donated_priority = 0;
 	}
 	else{
 		struct list_elem *i;
@@ -412,14 +411,22 @@ thread_recalc_modified_priority(struct thread *t) {
 }
 
 void
-recalc_modified_priority_all(){
+recalc_modified_priority_all(void){
 	struct list_elem *i;
+	struct thread *v[10];
+	int c = 0;
 	for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+		v[c] = list_entry(i, struct thread, elem);
 		thread_recalc_modified_priority(list_entry(i, struct thread, elem));
+		c++;
 	}
 	for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+		v[c] = list_entry(i, struct thread, elem_blocked);
 		thread_recalc_modified_priority(list_entry(i, struct thread, elem_blocked));
+		c++;
 	}
+	v[c] = thread_current();
+	thread_recalc_modified_priority(thread_current());
 }
 
 int

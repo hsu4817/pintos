@@ -69,10 +69,6 @@ sema_down (struct semaphore *sema) {
 	old_level = intr_disable ();
 
 	while (sema->value == 0) {
-		struct semaphore *s = sema;
-		if (s != sema){
-			printf("asdfasdfasdfasdf\n");
-		}
 		list_push_back (&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
@@ -120,10 +116,17 @@ sema_up (struct semaphore *sema) {
 	If there is waiter, unblock.
 	*/
 	if (!list_empty (&sema->waiters)){
-		struct thread *highest_waiter = list_entry(list_max(&sema->waiters, less_priority, NULL), struct thread, elem);
-
-		list_remove(&highest_waiter->elem);
+		struct list_elem *i = list_begin(&sema->waiters);
+		struct list_elem *temp = i;
+		for (i = list_begin(&sema->waiters); i != list_end(&sema->waiters); i = list_next(i)){
+			if (thread_get_modified_priority(list_entry(i, struct thread, elem)) > thread_get_modified_priority (list_entry (temp, struct thread, elem))){
+				temp = i;
+			}
+		}
+		struct thread *highest_waiter = list_entry(temp, struct thread, elem);
+		list_remove(temp);
 		thread_unblock (highest_waiter);
+
 	}
 	sema->value++;
 	intr_set_level (old_level);
@@ -333,9 +336,29 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	if (!list_empty (&cond->waiters)){
+		struct list_elem *w;
+		struct list_elem *m;
+		struct semaphore *priori_sema;
+		int w_priority = 0;
+		for (w = list_begin(&cond->waiters); w != list_end(&cond->waiters); w = list_next(w)){
+			struct semaphore *sema = &list_entry(w, struct semaphore_elem, elem)->semaphore;
+			struct list_elem *i;
+			int s_priority = 0;
+			for (i = list_begin(&sema->waiters); i != list_end(&sema->waiters); i = list_next(i)){
+				int temp = thread_get_modified_priority(list_entry(i, struct thread, elem));
+				if (temp > s_priority) s_priority = temp;
+			}
+			if (s_priority > w_priority) {
+				w_priority = s_priority;
+				m = w;
+				priori_sema = sema;
+			}
+		}
+		list_remove(m);
+
+		sema_up (priori_sema);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
