@@ -569,7 +569,6 @@ thread_get_nice (void) {
 }
 
 /* Returns 100 times the system load average. */
-int before_tick = 0;
 
 int
 thread_get_load_avg (void) {
@@ -583,9 +582,6 @@ thread_get_load_avg (void) {
 
 	load_avg_called = 1;
 
-	if(timer_ticks() == before_tick){
-		return ((load_avg*100 + f/2)/f);
-	}
 
 	if(timer_ticks() % TIMER_FREQ == 0){
 		if(thread_current()->tid == idle_thread->tid){
@@ -599,7 +595,6 @@ thread_get_load_avg (void) {
 
 	//intr_set_level(old_level);
 	//printf("%d ", timer_ticks());
-	before_tick = timer_ticks();
 
 	return ((load_avg*100 + f/2)/f);
 }
