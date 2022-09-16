@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -65,6 +66,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 int load_avg = 0;
+int f = (1<<14);
  
 
 /* If false (default), use round-robin scheduler.
@@ -209,6 +211,17 @@ thread_tick (void) {
 		intr_set_level(old_level);
 	}
 	
+	//mlfqs load_avg recount
+
+	if(thread_mlfqs){
+		if(timer_ticks() != 0){
+				if(timer_ticks() % TIMER_FREQ == 0) {
+					thread_get_load_avg();
+					thread_get_recent_cpu();
+			}
+		}
+
+	}
 
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
@@ -494,13 +507,18 @@ thread_get_modified_priority (struct thread *t) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
 
-	if (!list_empty(&ready_list)){
-		if(new_priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
-		thread_yield();
-		}	
+	if(!thread_mlfqs){
+		thread_current ()->priority = new_priority;
+
+		if (!list_empty(&ready_list)){
+			if(new_priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
+			thread_yield();
+			}	
+		}
 	}
+
+
 	
 }
 
@@ -510,10 +528,11 @@ thread_set_priority (int new_priority) {
 //recent_cpu, load_avg are maintained as multiplied by f
 //Only when getting gives rounded value
 
- int f = (1<<14);
-
 int
 thread_get_priority (void) {
+	if (thread_mlfqs) {
+		return thread_current()->priority;
+	}
 	return thread_get_modified_priority(thread_current());
 }
 
@@ -528,7 +547,13 @@ thread_set_nice (int nice UNUSED) {
 
 	int new_prio = PRI_MAX*f - (thread_current()->recent_cpu/4) - (nice*2)*f;
 
-	thread_current()->priority = (new_prio +f/2)/f;
+	thread_current()->priority = (new_prio + f/2)/f;
+
+	if (!list_empty(&ready_list)){
+		if(thread_current()->priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
+			thread_yield();
+		}	
+	}
 
 }
 
@@ -540,11 +565,31 @@ thread_get_nice (void) {
 }
 
 /* Returns 100 times the system load average. */
+int before_tick = 0;
+
 int
 thread_get_load_avg (void) {
 	/* TODO: Your implementation goes here */
 
-	load_avg = ( (59/60)*load_avg + (1/60)*list_size(&ready_list) )*f;
+	//enum intr_level old_level = intr_disable();
+
+	if(timer_ticks() == before_tick){
+		return ((load_avg*100 + f/2)/f);
+	}
+
+	if(timer_ticks() % TIMER_FREQ == 0){
+		if(thread_current()->tid == idle_thread->tid){
+				load_avg = 59*load_avg/60 + (list_size(&ready_list))*f/60;
+		}
+		else{
+			load_avg = 59*load_avg/60 + (list_size(&ready_list)+1)*f/60;
+		}
+
+	}
+
+	//intr_set_level(old_level);
+	printf("%d ", timer_ticks());
+	before_tick = timer_ticks();
 
 	return ((load_avg*100 + f/2)/f);
 }
@@ -555,7 +600,7 @@ thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
 
 	//recalculate load_avg
-	thread_get_load_avg();
+	//thread_get_load_avg();
 
 	//calculate recent_cpu
 	thread_current()->recent_cpu = ( (2*load_avg)/(2*load_avg+1)*(thread_current()->recent_cpu) + thread_get_nice()*f );
