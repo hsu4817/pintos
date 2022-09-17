@@ -473,19 +473,13 @@ thread_recalc_modified_priority(struct thread *t) {
 void
 recalc_modified_priority_all(void){
 	struct list_elem *i;
-	struct thread *v[10];
-	int c = 0;
+
 	for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
-		v[c] = list_entry(i, struct thread, elem);
 		thread_recalc_modified_priority(list_entry(i, struct thread, elem));
-		c++;
 	}
 	for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
-		v[c] = list_entry(i, struct thread, elem_blocked);
 		thread_recalc_modified_priority(list_entry(i, struct thread, elem_blocked));
-		c++;
 	}
-	v[c] = thread_current();
 	thread_recalc_modified_priority(thread_current());
 }
 
