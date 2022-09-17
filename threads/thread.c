@@ -221,7 +221,9 @@ thread_tick (void) {
 	if(thread_mlfqs){
 
 		if(t != idle_thread){
-			thread_current()->recent_cpu = thread_current()->recent_cpu + 1;
+			if(idle_thread->status != THREAD_RUNNING){
+				t->recent_cpu = t->recent_cpu + f;
+			}
 		}
 
 
@@ -239,36 +241,39 @@ thread_tick (void) {
 
 		//priority calculation for all threads
 
-			if(timer_ticks() % 4 == 0){
+		if(timer_ticks() % 4 == 0){
 
-				if(t != idle_thread){
-					struct list_elem *i;
+			if(t != idle_thread){
 
-					if(!list_empty(&ready_list)){
+				thread_set_priority_mlfqs(t);
 
-						for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
-							thread_set_priority_mlfqs(list_entry(i, struct thread, elem));
+				struct list_elem *i;
 
-							if(i == list_next(i)){
-									break;
-							}
+				if(!list_empty(&ready_list)){
 
+					for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
+						thread_set_priority_mlfqs(list_entry(i, struct thread, elem));
+
+						if(i == list_next(i)){
+								break;
 						}
+
 					}
-					
-					
-					if(!list_empty(&blocked_list)){
+				}
+				
+				
+				if(!list_empty(&blocked_list)){
 
-						for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
-							thread_set_priority_mlfqs(list_entry(i, struct thread, elem_blocked));
+					for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
+						thread_set_priority_mlfqs(list_entry(i, struct thread, elem_blocked));
 
-							if(i == list_next(i)){
-									break;
-							}
+						if(i == list_next(i)){
+								break;
 						}
 					}
 				}
 			}
+		}
 
 	}
 	/* Enforce preemption. */
@@ -606,6 +611,8 @@ thread_set_nice (int nice UNUSED) {
 	/* TODO: Your implementation goes here */
 	thread_current()->nice = nice;
 
+	//recent_cpu recaclulate? 몰?루
+
 	int new_prio = PRI_MAX*f - (thread_current()->recent_cpu/4) - (nice*2)*f;
 
 	thread_current()->priority = (new_prio + f/2)/f;
@@ -716,8 +723,12 @@ thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
 
 	//rounding
-	if(thread_current()->recent_cpu >=0) return (thread_current()->recent_cpu*100 + f/2)/f;
-	else return (thread_current()->recent_cpu*100 - f/2)/f;
+	if(thread_current()->recent_cpu >=0) {
+		return (thread_current()->recent_cpu*100 + f/2)/f;
+	}
+	else {
+		return (thread_current()->recent_cpu*100 - f/2)/f;
+	}
 
 }
 
