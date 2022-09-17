@@ -567,12 +567,10 @@ thread_set_nice (int nice UNUSED) {
 	thread_current()->priority = (new_prio + f/2)/f;
 
 	if (!list_empty(&ready_list)){
-		if(thread_current()->priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
-			thread_yield();
-		}	
-	}
-
+		thread_yield();
+	}	
 }
+
 
 /* Returns the current thread's nice value. */
 int
