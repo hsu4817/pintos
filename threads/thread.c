@@ -518,9 +518,7 @@ thread_set_priority (int new_priority) {
 		thread_current ()->priority = new_priority;
 
 		if (!list_empty(&ready_list)){
-			if(new_priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
 			thread_yield();
-			}	
 		}
 	}
 	else{
@@ -528,9 +526,7 @@ thread_set_priority (int new_priority) {
 		thread_set_priority_mlfqs(thread_current());
 
 		if (!list_empty(&ready_list)){
-			if(new_priority <= thread_get_modified_priority(max_thread_priority(&ready_list))){
 			thread_yield();
-			}	
 		}
 
 	}
