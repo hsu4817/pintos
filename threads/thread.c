@@ -400,7 +400,7 @@ thread_exit (void) {
 
 /* Yields the CPU when current thread is put to sleep. */
 void
-thread_sleep_yield () {
+thread_sleep_yield (void) {
 	enum intr_level old_level;
 
 	ASSERT (!intr_context ());
@@ -429,7 +429,7 @@ thread_yield (void) {
 }
 
 
-void make_donation(){
+void make_donation(void){
 	struct thread *curr = thread_current();
 	struct thread *donatee = curr->waiting->holder;
 	
@@ -588,7 +588,7 @@ thread_get_nice (void) {
 /* Returns 100 times the system load average. */
 
 void
-thread_set_load_avg (void) {
+thread_set_load_avg () {
 	/* TODO: Your implementation goes here */
 
 	//enum intr_level old_level = intr_disable();
