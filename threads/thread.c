@@ -225,7 +225,6 @@ thread_tick (void) {
 					if(i == list_next(i)){
 							break;
 					}
-
 				}
 			}
 			
@@ -423,65 +422,52 @@ thread_yield (void) {
 }
 
 
-void make_donation(void){
-	struct thread *curr = thread_current();
-	struct thread *donatee = curr->waiting->holder;
-	
-	list_push_back(&donatee->donations, &curr->elem_donation);
-}
+void recalc_m_p_downward (void){
+	struct thread* curr = thread_current();
+	struct thread* donatee = curr->waiting->holder;
 
+	int donation_priority = thread_get_modified_priority(curr);
 
-void remove_donation(struct lock *lock){
-	struct thread *curr = thread_current();
-	struct list_elem *i;
-	ASSERT(!list_empty(&curr->donations));
-
-	for (i = list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
-		// i is donation
-		
-		if (lock == list_entry(i, struct thread, elem_donation)->waiting){
-			struct list_elem *temp = i;
-			i = list_prev(i);
-			list_remove(temp);
-		}
+	for (int i = DONATE_CHAIN_MAX; i != 0; i--){
+		if (thread_get_modified_priority(donatee) < donation_priority){
+			donatee->donated_priority = donation_priority;
+			if (donatee->waiting == NULL){
+				break;
+			}
+			else{
+				donatee = donatee->waiting->holder;
+			}
+		} 
 	}
 }
 
-void
-thread_recalc_modified_priority(struct thread *t) {
-	struct thread *curr = t;
-	int highest_priority = 0;
+void recalc_m_p_upward (void){
+	struct list_elem *i;
+	struct list_elem *s;
+	struct thread *curr = thread_current();
 
-	/* Calculate modified priority of this thread considering donated priorities. 
-	   If this thread is waiting for some lock, reculsivly calculate for the holder of the lock. */
-	if (list_empty(&curr->donations)){
+	
+
+	if (list_empty(&thread_current()->holding_locks)){
 		curr->donated_priority = 0;
 	}
 	else{
-		struct list_elem *i;
-
-		for (i = list_begin(&curr->donations); i != list_end(&curr->donations); i = list_next(i)){
-			struct thread *temp_donater=list_entry(i, struct thread, elem_donation);
-			// Reculsive call
-			thread_recalc_modified_priority(temp_donater);
-			if (highest_priority < thread_get_modified_priority(temp_donater)) highest_priority = thread_get_modified_priority(temp_donater);
+		int highest_priority = 0;
+		for (i = list_begin(&thread_current()->holding_locks); i != list_end(&thread_current()->holding_locks); i = list_next(i)){
+			struct semaphore *sema = &list_entry(i, struct lock, elem_donation)->semaphore;
+			for (s = list_begin(&sema->waiters); s != list_end(&sema->waiters); s = list_next(s))
+			{
+				ASSERT (is_thread(list_entry(s, struct thread, elem)));
+				int temp_pri = thread_get_modified_priority(list_entry(s, struct thread, elem));
+				if (temp_pri > highest_priority){
+					highest_priority = temp_pri;
+				}
+			}
 		}
 		curr->donated_priority = highest_priority;
 	}
 }
 
-void
-recalc_modified_priority_all(void){
-	struct list_elem *i;
-
-	for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
-		thread_recalc_modified_priority(list_entry(i, struct thread, elem));
-	}
-	for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
-		thread_recalc_modified_priority(list_entry(i, struct thread, elem_blocked));
-	}
-	thread_recalc_modified_priority(thread_current());
-}
 
 int
 thread_get_modified_priority (struct thread *t) {
@@ -512,10 +498,8 @@ thread_set_priority (int new_priority) {
 	else{
 
 		thread_set_priority_mlfqs(thread_current());
+		thread_yield();
 
-		if (!list_empty(&ready_list)){
-			thread_yield();
-		}
 
 	}
 }
@@ -737,7 +721,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->waiting = NULL;
 
-	list_init(&t->donations);
+	list_init(&t->holding_locks);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

@@ -100,11 +100,10 @@ struct thread {
 	int64_t sleep;							/* Sleep ticks */
 	
 	/* Shared between thread.c and synch.c. */
-	struct list donations;				/* List of donater. */
+	struct list holding_locks;			/* List of holding locks. */
 	struct lock *waiting;				/* Locked with this */
 	struct list_elem elem;              /* List element. */
 	struct list_elem elem_blocked;		/* List element for blocked list */
-	struct list_elem elem_donation;		/* List element for donation */
 	struct list_elem elem_sleep;		/* List element for sleep */
 
 #ifdef USERPROG
@@ -147,10 +146,8 @@ void thread_exit (void) NO_RETURN;
 void thread_sleep_yield (void);
 void thread_yield (void);
 
-void make_donation (void);
-void remove_donation (struct lock *lock);
-void thread_recalc_modified_priority(struct thread *t);
-void recalc_modified_priority_all(void);
+void recalc_m_p_downward (void);
+void recalc_m_p_upward (void);
 int thread_get_modified_priority (struct thread* t);
 int thread_get_priority (void);
 void thread_set_priority (int);
