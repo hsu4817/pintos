@@ -87,10 +87,6 @@ typedef int tid_t;
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
 
-struct waiting_tid {
-	tid_t tid;
-	struct semaphore *sema;
-};
 
 struct thread {
 	/* Owned by thread.c. */
@@ -98,14 +94,18 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int donated_priority;				/* Donated priority. */
 	int recent_cpu;						/* Recent cpu. */
 	int nice;							/* Nice value */
+	int64_t sleep;							/* Sleep ticks */
 	
 	/* Shared between thread.c and synch.c. */
-	struct list donations;				/* Donated_priority. */
-	struct waiting_tid waiting;			/* Locked with this */
+	struct list donations;				/* List of donater. */
+	struct lock *waiting;				/* Locked with this */
 	struct list_elem elem;              /* List element. */
 	struct list_elem elem_blocked;		/* List element for blocked list */
+	struct list_elem elem_donation;		/* List element for donation */
+	struct list_elem elem_sleep;		/* List element for sleep */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -126,7 +126,6 @@ struct thread {
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 void blocked_list_init(void);
-void blocked_list_add(struct list_elem *elem_blocked);
 void blocked_list_remove(struct list_elem *elem_blocked);
 void thread_init (void);
 void thread_start (void);
@@ -138,17 +137,20 @@ typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
-bool thread_unblock (struct thread *);
+void thread_unblock (struct thread *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
-void thread_sleep_yield (struct semaphore *ticks_sema, int64_t ticks);
+void thread_sleep_yield (void);
 void thread_yield (void);
 
+void make_donation (void);
+void remove_donation (struct lock *lock);
 void thread_recalc_modified_priority(struct thread *t);
+void recalc_modified_priority_all(void);
 int thread_get_modified_priority (struct thread* t);
 int thread_get_priority (void);
 void thread_set_priority (int);
@@ -158,7 +160,7 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-struct thread *max_thread_priority(struct list* list);
+bool less_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
 void do_iret (struct intr_frame *tf);
 
 #endif /* threads/thread.h */
