@@ -168,7 +168,7 @@ thread_tick (void) {
 	else
 		kernel_ticks++;
 
-
+	/* Update left ticks to sleep for all threads in sleeping list. If it is equal or less then 0, wake up it. */
 	if (!list_empty(&sleeping_list)){
 		enum intr_level old_level;
 		old_level = intr_disable();
@@ -198,7 +198,7 @@ thread_tick (void) {
 			}
 		}
 
-
+		/* Calculate load avg and recent cpu for every seconds. */
 		if(timer_ticks() % TIMER_FREQ == 0) {
 			if(load_avg_called == 0){
 				thread_set_load_avg();
@@ -207,8 +207,7 @@ thread_tick (void) {
 			thread_set_recent_all();
 		}
 
-		//priority calculation for all threads
-
+		/* Calculate priority of all threads based on mlfqs. */
 		if(timer_ticks() % 4 == 0){
 
 			if(t != idle_thread){
@@ -228,7 +227,6 @@ thread_tick (void) {
 				}
 			}
 			
-			
 			if(!list_empty(&blocked_list)){
 
 				for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
@@ -240,7 +238,6 @@ thread_tick (void) {
 				}
 			}
 		}
-
 	}
 	/* Enforce preemption. */
 		if (++thread_ticks >= TIME_SLICE)
@@ -496,20 +493,17 @@ thread_set_priority (int new_priority) {
 		}
 	}
 	else{
-
 		thread_set_priority_mlfqs(thread_current());
 		thread_yield();
-
-
 	}
 }
 
+/* Calculate priority of desired thread based on mlfqs. */ 
 void
 thread_set_priority_mlfqs(struct thread* thread_for_set){
 
 	int prio = PRI_MAX*f - (thread_for_set->recent_cpu/4) - (thread_for_set->nice*2)*f;
 	thread_for_set->priority = (prio + f/2)/f;
-
 }
 
 
@@ -551,14 +545,9 @@ thread_get_nice (void) {
 	return thread_current()->nice;
 }
 
-/* Returns 100 times the system load average. */
-
+/* Calculate load avg exactly one time in one tick. */
 void
 thread_set_load_avg () {
-	/* TODO: Your implementation goes here */
-
-	//enum intr_level old_level = intr_disable();
-
 	if(load_avg_called == 0){
 		if(thread_current()->tid == idle_thread->tid){
 				load_avg = 59*load_avg/60 + (list_size(&ready_list))*f/60;
@@ -567,25 +556,20 @@ thread_set_load_avg () {
 			load_avg = 59*load_avg/60 + (list_size(&ready_list)+1)*f/60;
 		}
 	}
-	//intr_set_level(old_level);
-	//printf("%d ", timer_ticks());
 	load_avg_called = 1;
 }
 
-
+/* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) {
-	/* TODO: Your implementation goes here */
 	return ((load_avg*100 + f/2)/f);
 }
 
 
 
-/* Returns 100 times the current thread's recent_cpu value. */
+/* Calculate recent cpu of all threads, except idel thread. */
 void
 thread_set_recent_all(){
-
-
 	if(thread_current() != idle_thread){
 		thread_set_recent_cpu(thread_current());
 	}
@@ -593,8 +577,6 @@ thread_set_recent_all(){
 	struct list_elem *i;
 
 	if(!list_empty(&ready_list)){
-
-
 		for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
 			thread_set_recent_cpu(list_entry(i, struct thread, elem));
 
@@ -605,8 +587,6 @@ thread_set_recent_all(){
 	}
 
 	if(!list_empty(&blocked_list)){
-
-
 		for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
 			thread_set_recent_cpu(list_entry(i, struct thread, elem_blocked));
 
@@ -615,33 +595,23 @@ thread_set_recent_all(){
 			}
 		}
 	}
-
 }
 
-
+/* Calculate recent cpu of desired thread. */
 void
 thread_set_recent_cpu (struct thread* thread_for_set) {
-	/* TODO: Your implementation goes here */
-
-	//recalculate load_avg
-	//thread_get_load_avg();
 
 	int recent_cpu_for_set = thread_for_set->recent_cpu;
 
-	if(recent_avg_called == 0){
-		//calculate recent_cpu
-
-		int temp = (((int64_t)(2*load_avg)) *f /(2*load_avg + f));
-		int temp2 = ((int64_t)temp)*(recent_cpu_for_set)/f;
-
-		recent_cpu_for_set = ( temp2+ thread_for_set->nice*f );
-	}
-
+	//calculate recent_cpu
+	int temp = (((int64_t)(2*load_avg)) *f /(2*load_avg + f));
+	int temp2 = ((int64_t)temp)*(recent_cpu_for_set)/f;
+	recent_cpu_for_set = ( temp2+ thread_for_set->nice*f );
+	
 	thread_for_set->recent_cpu = recent_cpu_for_set;
-
 }
 
-
+/* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */

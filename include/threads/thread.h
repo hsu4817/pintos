@@ -97,7 +97,7 @@ struct thread {
 	int donated_priority;				/* Donated priority. */
 	int recent_cpu;						/* Recent cpu. */
 	int nice;							/* Nice value */
-	int64_t sleep;							/* Sleep ticks */
+	int64_t sleep;						/* Sleep ticks */
 	
 	/* Shared between thread.c and synch.c. */
 	struct list holding_locks;			/* List of holding locks. */
