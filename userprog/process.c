@@ -328,6 +328,25 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	
+	/* 새로짠거 */
+	size_t command_length = strlen (file_name);
+	char argv[command_length+1];
+	strlcpy (argv, file_name, command_length + 1);
+
+	size_t file_name_length = 0;
+	while (*file_name == ' ') file_name++;
+	char *p = file_name;
+	while (*p != ' ' && *p != '\0') p++;
+	file_name_length = p - file_name;
+
+	char new_file_name[file_name_length+1];
+	strlcpy (new_file_name, file_name, file_name_length + 1);
+	if (strlen(command_length) > 4096)
+	{
+		printf ("Command is too long\n");
+		goto done;
+	}
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -336,9 +355,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (new_file_name);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf ("load: %s: open failed\n", new_file_name);
 		goto done;
 	}
 
@@ -350,7 +369,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+		printf ("load: %s: error loading executable\n", new_file_name);
 		goto done;
 	}
 
@@ -414,8 +433,46 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
+	
+
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	char *token, *save_ptr;
+	
+	int argc = 0;
+	int argc_2 = 0;
+	char *p = USER_STACK;
+	size_t argv_size = 0;
+
+	size_t command_length = strlen (file_name);
+	strlcpy (argv, file_name, command_length+1);
+	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+	{	
+		argc++;
+		size_t argsize = strlen (token);
+		p -= ++argsize;
+		argv_size += argsize;
+	}
+	p = ((unsigned long long) p & ~7); // World align
+
+
+	strlcpy (argv, file_name, command_length+1);
+	p = (char*)(p - 8*(argc+1)); // Go to top of the user stack
+	char *p_p = USER_STACK;
+	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+	{
+		size_t argsize = strlen (token);
+		strlcpy((p_p - argsize - 1), token, argsize + 1);
+		p_p -= ++argsize;
+		*(p + (8*argc_2)) = p_p;
+		argc_2++; 
+	}
+	*(p + (8*argc_2)) = NULL;
+
+	if_->R.rdi = argc;
+	if_->R.rsi = p;
+	
+	*(p-8) = NULL; // pushing falut return address. does casting need? 
 
 	success = true;
 
