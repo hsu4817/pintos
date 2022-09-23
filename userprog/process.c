@@ -336,13 +336,13 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	size_t file_name_length = 0;
 	while (*file_name == ' ') file_name++;
-	char *p = file_name;
-	while (*p != ' ' && *p != '\0') p++;
-	file_name_length = p - file_name;
+	char *sv = file_name;
+	while (*sv != ' ' && *sv != '\0') sv++;
+	file_name_length = sv - file_name;
 
 	char new_file_name[file_name_length+1];
 	strlcpy (new_file_name, file_name, file_name_length + 1);
-	if (strlen(command_length) > 4096)
+	if (command_length > 4096)
 	{
 		printf ("Command is too long\n");
 		goto done;
@@ -433,8 +433,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	
-
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	char *token, *save_ptr;
@@ -444,7 +442,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	char *p = USER_STACK;
 	size_t argv_size = 0;
 
-	size_t command_length = strlen (file_name);
+	command_length = strlen (file_name);
 	strlcpy (argv, file_name, command_length+1);
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{	
@@ -453,7 +451,7 @@ load (const char *file_name, struct intr_frame *if_) {
 		p -= ++argsize;
 		argv_size += argsize;
 	}
-	p = ((unsigned long long) p & ~7); // World align
+	p = (char *)((unsigned long long) p & ~7); // World align
 
 
 	strlcpy (argv, file_name, command_length+1);
@@ -464,13 +462,13 @@ load (const char *file_name, struct intr_frame *if_) {
 		size_t argsize = strlen (token);
 		strlcpy((p_p - argsize - 1), token, argsize + 1);
 		p_p -= ++argsize;
-		*(p + (8*argc_2)) = p_p;
+		*(p + (8*argc_2)) = (unsigned long long) p_p;
 		argc_2++; 
 	}
-	*(p + (8*argc_2)) = NULL;
+	*(p + (8*argc_2)) = (unsigned long long) NULL;
 
 	if_->R.rdi = argc;
-	if_->R.rsi = p;
+	if_->R.rsi = (unsigned long long) p;
 	
 	*(p-8) = NULL; // pushing falut return address. does casting need? 
 
