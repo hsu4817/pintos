@@ -439,7 +439,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 	int argc = 0;
 	int argc_2 = 0;
-	char *p = USER_STACK;
+	unsigned long p = USER_STACK;
 	size_t argv_size = 0;
 
 	command_length = strlen (file_name);
@@ -447,31 +447,28 @@ load (const char *file_name, struct intr_frame *if_) {
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{	
 		argc++;
-		size_t argsize = strlen (token);
-		p -= ++argsize;
-		argv_size += argsize;
+		size_t argsize = strlen (token) + 1;
+		p -= argsize;
 	}
-	p = (char *)((unsigned long long) p & ~7); // World align
+	p =  p & ~7; // World align
+	p = p - 8*(argc+1); // Go to top of the user stack.
+	*((void **) (p-8)) = 0; // Pushing fault retunr address.
 
+	if_->R.rsi = p;
+	if_->R.rdi = argc;
 
 	strlcpy (argv, file_name, command_length+1);
-	p = (char*)(p - 8*(argc+1)); // Go to top of the user stack
-	char *p_p = USER_STACK;
+	unsigned long p_p = USER_STACK;
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{
-		size_t argsize = strlen (token);
-		strlcpy((p_p - argsize - 1), token, argsize + 1);
-		p_p -= ++argsize;
-		*(p + (8*argc_2)) = (unsigned long long) p_p;
-		argc_2++; 
+		size_t argsize = strlen (token) + 1;
+		p_p -= argsize;
+		strlcpy(p_p, token, argsize);
+		memcpy (p, &p_p, 8);
+		p += 8;
 	}
-	*(p + (8*argc_2)) = (unsigned long long) NULL;
-
-	if_->R.rdi = argc;
-	if_->R.rsi = (unsigned long long) p;
+	*((char *) p) = NULL;
 	
-	*(p-8) = NULL; // pushing falut return address. does casting need? 
-
 	success = true;
 
 done:
