@@ -438,9 +438,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	char *token, *save_ptr;
 	
 	int argc = 0;
-	int argc_2 = 0;
 	unsigned long p = USER_STACK;
-	size_t argv_size = 0;
 
 	command_length = strlen (file_name);
 	strlcpy (argv, file_name, command_length+1);
@@ -463,12 +461,12 @@ load (const char *file_name, struct intr_frame *if_) {
 	{
 		size_t argsize = strlen (token) + 1;
 		p_p -= argsize;
-		strlcpy(p_p, token, argsize);
-		memcpy (p, &p_p, 8);
+		strlcpy((char *) p_p, token, argsize);
+		memcpy ((void *) p, &p_p, 8);
 		p += 8;
 	}
-	*((char *) p) = NULL;
-	
+	*((char *) p) = (char *) NULL;
+
 	success = true;
 
 done:
