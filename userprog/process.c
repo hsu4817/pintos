@@ -31,6 +31,18 @@ static void __do_fork (void *);
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+	struct fdesc *stdinput = malloc (sizeof(struct fdesc));
+	struct fdesc *stdoutput = malloc (sizeof(struct fdesc));
+	
+	stdinput->desc_no = 0;
+	stdinput->file = NULL;
+	stdoutput->desc_no = 1;
+	stdoutput->file = NULL;
+
+	list_init (&current->desc_table);
+	
+	list_push_back (&current->desc_table, &stdinput->elem);
+	list_push_back (&current->desc_table, &stdoutput->elem);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
