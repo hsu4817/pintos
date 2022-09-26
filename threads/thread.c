@@ -691,7 +691,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->waiting = NULL;
 
+
 	list_init(&t->holding_locks);
+	sema_init(t->parent_sema,1);
+	t->child_exit_status = -1;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

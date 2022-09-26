@@ -7,6 +7,8 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "threads/mmu.h"
+#include "lib/user/syscall.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -44,3 +46,68 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	printf ("system call!\n");
 	thread_exit ();
 }
+
+void halt (void){
+	power_off();
+}
+
+void exit (int status){
+
+	//process exit 실패했을 경우도 생각????
+	thread_current()->status = 0;
+	thread_current()->parent->child_exit_status = status;
+	thread_exit();
+	
+}
+
+pid_t fork(const char *thread_name){
+	
+	pid_t forked_child = process_fork(thread_name);
+
+	//__dofork needed
+
+	if(thread_current() == forked_child){
+		return 0;
+	}
+	else{
+		return forked_child;
+	}
+}
+
+int exec (const char *cmd_line);
+
+int wait (pid_t pid){
+
+	struct list_elem *i;
+	int tag = 0;
+	for (i = list_begin(&thread_current()->childs); i != list_end(&thread_current()->childs); i = list_next(i)){
+		if(list_entry(i, struct thread, elem_child)->tid == pid){
+			tag = 1;
+			break;
+		}
+	} // 이거 하나로 될라나?
+
+	if(tag == 0){
+		return -1;
+	}
+
+	return process_wait(pid);
+}
+
+bool create (const char *file, unsigned initial_size);
+
+bool remove (const char *file);
+
+int open (const char *file);
+
+int filesize (int fd);
+
+int read (int fd, void *buffer, unsigned size);
+
+int write (int fd, const void *buffer, unsigned size);
+
+void seek (int fd, unsigned position);
+
+unsigned tell (int fd);
+
+void close (int fd);

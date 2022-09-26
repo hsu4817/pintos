@@ -106,6 +106,13 @@ struct thread {
 	struct list_elem elem_blocked;		/* List element for blocked list */
 	struct list_elem elem_sleep;		/* List element for sleep */
 
+	/*used in process.c and syscall.c*/
+	struct list childs;					/* children processes*/
+	struct list_elem elem_child;
+	struct thread *parent;				/*parent process*/
+	struct semaphore *parent_sema;		/*parent's sema*/
+	int child_exit_status;				/*child's exit status*/
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
