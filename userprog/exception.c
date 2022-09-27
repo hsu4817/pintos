@@ -159,7 +159,6 @@ page_fault (struct intr_frame *f) {
 		if (is_timer ()) PANIC ("page fault while timer interrupt.\n");
 		PANIC ("kernel page fault.\n");
 	}
-	
 	kill (f);
 }
 

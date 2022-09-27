@@ -41,8 +41,6 @@ process_init (void) {
 	stdinput->file = NULL;
 	stdoutput->desc_no = 1;
 	stdoutput->file = NULL;
-
-	list_init (&current->desc_table);
 	
 	list_push_back (&current->desc_table, &stdinput->elem);
 	list_push_back (&current->desc_table, &stdoutput->elem);
@@ -269,12 +267,13 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	
+
 	struct list_elem *i;
-	struct list_elem *next;
-	for (i = list_begin (&curr->desc_table); next != list_end (&curr->desc_table); i = next){
-		next = list_next (i);
-		file_close (list_entry (i, struct fdesc, elem)->file);
-		free (list_entry (i, struct fdesc, elem));
+	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
+		struct list_elem *temp = i;
+		i = list_next(i);
+		file_close (list_entry (temp, struct fdesc, elem)->file);
+		free (list_entry (temp, struct fdesc, elem));
 	}
 
 	if (curr->parent != NULL) list_remove(&curr->elem_child);
@@ -424,7 +423,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		printf ("Command is too long\n");
 		goto done;
 	}
-	printf ("Loading '%s'\n", new_file_name);
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -513,13 +511,12 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	printf ("argument passing...\n");
 	enum intr_level oold_level = intr_disable (); //Interrupt off.
 
 	char *token, *save_ptr;
 	
 	int argc = 0;
-	unsigned long p = USER_STACK;
+	unsigned long long p = USER_STACK;
 
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{	
@@ -529,26 +526,27 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 	p =  p & ~7; // World align
 	p = p - 8*(argc+1); // Go to top of the user stack.
-	*((void **) (p-8)) = 0; // Pushing fault retunr address.
+	*((void **) (p-8)) = NULL; // Pushing fault retunr address.
 
 	if_->R.rsi = p;
 	if_->R.rdi = argc;
 
 	strlcpy (argv, file_name, command_length+1);
-	unsigned long p_p = USER_STACK;
+	unsigned long long p_p = USER_STACK;
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{
 		size_t argsize = strlen (token) + 1;
 		p_p -= argsize;
 		strlcpy((char *) p_p, token, argsize);
-		memcpy ((void *) p, &p_p, 8);
+		memcpy ((char **) p, &p_p, 8); //p_p에는 arg의 시작 주소가 있음 (char*). p가 저장하고 있는 주소에 p_p의 값을 복사해야 함
+		printf("Copied %s to %p.\n", (char *) p_p, (char *) p_p);
+		printf("Stored %p to %p.\n", (char *) p_p, (char **) p);
 		p += 8;
 	}
-	*((char *) p) = (char *) NULL;
+	*(char **)p = NULL;
 	success = true;
 
 	intr_set_level (old_level); //Interrupt on.
-	printf("argument passing done.\n");
 done:
 	/* We arrive here whether the load is successful or not. */
 	palloc_free_page (argv);

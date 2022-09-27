@@ -344,6 +344,7 @@ thread_unblock (struct thread *t) {
 	list_remove(&t->elem_blocked);
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
+
 	intr_set_level (old_level);
 }
 
@@ -700,7 +701,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->parent = NULL;
 	t->parent_sema = NULL;
 
-	list_init(&t->holding_locks);
+	list_init (&t->childs);
+	list_init (&t->desc_table);
+	list_init (&t->holding_locks);
 	t->child_exit_status = -1;
 }
 
