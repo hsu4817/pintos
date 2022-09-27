@@ -13,12 +13,14 @@
 
 #include "filesys/file.h"
 #include "filesys/filesys.h"
-#include "malloc.h"
+#include "threads/malloc.h"
 #include "lib/kernel/stdio.h"
 #include "userprog/process.h"
 
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+struct file* get_file_with_fd (int fd);
 
 
 /* System call.
@@ -102,7 +104,7 @@ void exit (int status){
 	
 }
 
-int fork (const char *thread_name, struct intr_frame *if_){
+tid_t fork (const char *thread_name, struct intr_frame *if_){
 	tid_t forked_child = process_fork(thread_name, if_);
 	if (forked_child == TID_ERROR) {
 		return -1;
@@ -116,6 +118,11 @@ int fork (const char *thread_name, struct intr_frame *if_){
 }
 
 int exec (const char *cmd_line){
+	/*
+	int command_length = strlen (cmd_line);
+	char argv (command_length);
+	strlcpy ((argv, cmd_line), command_length+1);
+	*/
 	return process_exec (cmd_line);
 }
 
@@ -157,10 +164,11 @@ int open (const char *file) {
 	if (FD == NULL) {
 		return -1;
 	}
-	list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem);
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
 	fd->file = FD;
 	list_push_back (&curr->desc_table, &fd->elem);
+
+	intr_set_level (old_level);
 
 	return fd->desc_no;
 }
@@ -182,7 +190,6 @@ get_file_with_fd (int fd){
 
 
 int filesize (int fd) {
-	int fd_ = fd;
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 	return (int) file_length (file);
@@ -209,7 +216,7 @@ write (int fd, const void *buffer, unsigned length) {
 void
 seek (int fd, unsigned position) {
 	struct file* file = get_file_with_fd (fd);
-	if (file == NULL) return -1;
+	if (file == NULL) return;
 	
 	file_seek (file, position);
 }
@@ -218,7 +225,7 @@ unsigned tell (int fd) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 
-	file_tell (file);
+	return file_tell (file);
 }
 
 void close (int fd) {
