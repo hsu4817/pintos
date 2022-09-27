@@ -55,6 +55,54 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	thread_exit ();
 }
 
+
+void halt (void){
+	power_off();
+}
+
+void exit (int status){
+
+	//process exit 실패했을 경우도 생각????
+	thread_current()->status = 0;
+	thread_current()->parent->child_exit_status = status;
+	thread_exit();
+	
+}
+
+pid_t fork(const char *thread_name){
+	
+	pid_t forked_child = process_fork(thread_name);
+
+	if(thread_current() == forked_child){
+		return 0;
+	}
+	else{
+		return forked_child;
+	}
+}
+
+int exec (const char *cmd_line){
+	
+}
+
+int wait (pid_t pid){
+
+	struct list_elem *i;
+	int tag = 0;
+	for (i = list_begin(&thread_current()->childs); i != list_end(&thread_current()->childs); i = list_next(i)){
+		if(list_entry(i, struct thread, elem_child)->tid == pid){
+			tag = 1;
+			break;
+		}
+	} // 이거 하나로 될라나?
+
+	if(tag == 0){
+		return -1;
+	}
+
+	return process_wait(pid);
+}
+
 bool create (const char *file, unsigned initial_size) {
 	return filesys_create (file, initial_size);
 }
@@ -162,49 +210,4 @@ void close (int fd) {
 	}
 }
 
-void halt (void){
-	power_off();
-}
 
-void exit (int status){
-
-	//process exit 실패했을 경우도 생각????
-	thread_current()->status = 0;
-	thread_current()->parent->child_exit_status = status;
-	thread_exit();
-	
-}
-
-pid_t fork(const char *thread_name){
-	
-	pid_t forked_child = process_fork(thread_name);
-
-	if(thread_current() == forked_child){
-		return 0;
-	}
-	else{
-		return forked_child;
-	}
-}
-
-int exec (const char *cmd_line){
-	
-}
-
-int wait (pid_t pid){
-
-	struct list_elem *i;
-	int tag = 0;
-	for (i = list_begin(&thread_current()->childs); i != list_end(&thread_current()->childs); i = list_next(i)){
-		if(list_entry(i, struct thread, elem_child)->tid == pid){
-			tag = 1;
-			break;
-		}
-	} // 이거 하나로 될라나?
-
-	if(tag == 0){
-		return -1;
-	}
-
-	return process_wait(pid);
-}
