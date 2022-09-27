@@ -64,8 +64,6 @@ pid_t fork(const char *thread_name){
 	
 	pid_t forked_child = process_fork(thread_name);
 
-	//__dofork needed
-
 	if(thread_current() == forked_child){
 		return 0;
 	}
@@ -74,7 +72,9 @@ pid_t fork(const char *thread_name){
 	}
 }
 
-int exec (const char *cmd_line);
+int exec (const char *cmd_line){
+	
+}
 
 int wait (pid_t pid){
 
