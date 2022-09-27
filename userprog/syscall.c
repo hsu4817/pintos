@@ -82,7 +82,24 @@ pid_t fork(const char *thread_name){
 }
 
 int exec (const char *cmd_line){
-	
+
+	//존재 여부 체크 필요
+
+	int command_length = strlen (cmd_line);
+	char argv[command_length+1];
+	//char *token, *save_ptr;
+	strlcpy (argv, cmd_line, command_length+1);
+
+	//나눌 필요는 없는듯
+	/*for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+	{	
+		size_t argsize = strlen (token) + 1;
+	}*/
+
+	if(process_exec(argv) == -1){
+		return -1;
+	}
+
 }
 
 int wait (pid_t pid){
