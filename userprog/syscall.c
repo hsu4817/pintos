@@ -86,6 +86,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			close ((int) f->R.rdi);
 		default:
 			printf ("system call!\n");
+			// printf ("system call with invalid number %d\n", syscall_no);
 			thread_exit ();
 	}
 }

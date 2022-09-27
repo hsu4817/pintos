@@ -20,6 +20,7 @@
 #include "intrinsic.h"
 
 #include "threads/malloc.h"
+#include "lib/string.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -394,24 +395,35 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 	
-	/* 새로짠거 */
+	
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
 	size_t command_length = strlen (file_name);
-	char argv[command_length+1];
-	strlcpy (argv, file_name, command_length + 1);
+	char *argv = palloc_get_page (0);
+	ASSERT (argv != NULL);
+
+	strlcpy (argv, file_name, PGSIZE);
 
 	size_t file_name_length = 0;
-	while (*file_name == ' ') file_name++;
-	char *sv = file_name;
-	while (*sv != ' ' && *sv != '\0') sv++;
-	file_name_length = sv - file_name;
+	char *front = argv;
+	while (*front == ' ') front++;
+	char *end = front;
+	while (*end != ' ' && *end != '\0') end++;
+	file_name_length = end - front;
 
-	char new_file_name[file_name_length+1];
-	strlcpy (new_file_name, file_name, file_name_length + 1);
+	char *new_file_name = palloc_get_page (0);
+	ASSERT (new_file_name != NULL);
+
+	strlcpy (new_file_name, front, file_name_length+1);
+	intr_set_level (old_level);
+
 	if (command_length > 4096)
 	{
 		printf ("Command is too long\n");
 		goto done;
 	}
+	
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -505,8 +517,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	int argc = 0;
 	unsigned long p = USER_STACK;
 
-	command_length = strlen (file_name);
-	strlcpy (argv, file_name, command_length+1);
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{	
 		argc++;
@@ -531,11 +541,11 @@ load (const char *file_name, struct intr_frame *if_) {
 		p += 8;
 	}
 	*((char *) p) = (char *) NULL;
-
 	success = true;
-
 done:
 	/* We arrive here whether the load is successful or not. */
+	palloc_free_page (argv);
+	palloc_free_page (new_file_name);
 	file_close (file);
 	return success;
 }
