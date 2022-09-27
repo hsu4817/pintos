@@ -690,10 +690,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->donated_priority = 0;
 	t->magic = THREAD_MAGIC;
 	t->waiting = NULL;
-
-
+	t->parent = NULL;
+	t->parent_sema = NULL;
+	
 	list_init(&t->holding_locks);
-	sema_init(t->parent_sema,1);
 	t->child_exit_status = -1;
 }
 

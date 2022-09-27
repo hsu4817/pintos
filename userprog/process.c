@@ -169,6 +169,9 @@ __do_fork (void *aux) {
 
 	process_init ();
 
+	current->parent = parent;
+	list_push_back (&parent->childs, &current->elem_child);
+
 	/* Duplicate file descriptor. */
 	struct list_elem *i;
 	for (i = list_begin (&parent->desc_table); i != list_end (&parent->desc_table); i = list_next (i)) {
@@ -248,7 +251,9 @@ process_wait (tid_t child_tid UNUSED) {
 	if(tag == 0){
 		return -1;
 	}
-
+	struct semaphore wait_sema;
+	sema_init(&wait_sema, 0);
+	the_child->parent_sema = &wait_sema;
 	sema_down(the_child->parent_sema);
 
 	return thread_current()->child_exit_status;
@@ -262,10 +267,17 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	
+	struct list_elem *i;
+	struct list_elem *next;
+	for (i = list_begin (&curr->desc_table); next != list_end (&curr->desc_table); i = next){
+		next = list_next (i);
+		file_close (list_entry (i, struct fdesc, elem)->file);
+		free (list_entry (i, struct fdesc, elem));
+	}
 
-	list_remove(&thread_current()->elem_child);
-
-	sema_up(curr->parent_sema);
+	if (curr->parent != NULL) list_remove(&curr->elem_child);
+	if (curr->parent_sema != NULL) sema_up(curr->parent_sema);
 
 	//메세지 적기
 
