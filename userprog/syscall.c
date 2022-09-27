@@ -8,7 +8,6 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "threads/mmu.h"
-#include "lib/user/syscall.h"
 #include "threads/init.h"
 #include <list.h>
 
@@ -16,6 +15,7 @@
 #include "filesys/filesys.h"
 #include "malloc.h"
 #include "lib/kernel/stdio.h"
+#include "userprog/process.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -51,8 +51,41 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+	int syscall_no = f->R.rax;
+
+	switch (syscall_no) {
+		case SYS_HALT:
+			halt ();
+		case SYS_EXIT:
+			exit ((int) f->R.rdi);
+		case SYS_FORK:
+			f->R.rax = fork ((char *) f->R.rdi, (struct intr_frame *) f->R.rsi);
+		case SYS_EXEC:
+			f->R.rax = exec ((char *) f->R.rdi);
+		case SYS_WAIT:
+			f->R.rax = wait ((int) f->R.rdi);
+		case SYS_CREATE:
+			f->R.rax = create ((char *) f->R.rdi, (unsigned int) f->R.rsi);
+		case SYS_REMOVE:
+			f->R.rax = remove ((char *) f->R.rdi);
+		case SYS_OPEN:
+			f->R.rax = open ((char *) f->R.rdi);
+		case SYS_FILESIZE:
+			f->R.rax = filesize ((int) f->R.rdi);
+		case SYS_READ:
+			f->R.rax = read ((int) f->R.rdi, (void *) f->R.rsi, (unsigned int) f->R.rdx);
+		case SYS_WRITE:
+			f->R.rax = write ((int) f->R.rdi, (void *) f->R.rsi, (unsigned int) f->R.rdx);
+		case SYS_SEEK:
+			seek ((int) f->R.rdi, (unsigned int) f->R.rsi);
+		case SYS_TELL:
+			f->R.rax = tell ((int) f->R.rdi);
+		case SYS_CLOSE:
+			close ((int) f->R.rdi);
+		default:
+			printf ("system call!\n");
+			thread_exit ();
+	}
 }
 
 
@@ -69,11 +102,12 @@ void exit (int status){
 	
 }
 
-pid_t fork(const char *thread_name){
-	
-	pid_t forked_child = process_fork(thread_name);
-
-	if(thread_current() == forked_child){
+int fork (const char *thread_name, struct intr_frame *if_){
+	tid_t forked_child = process_fork(thread_name, if_);
+	if (forked_child == TID_ERROR) {
+		return -1;
+	}
+	if(thread_current()->tid == forked_child){
 		return 0;
 	}
 	else{
@@ -82,27 +116,10 @@ pid_t fork(const char *thread_name){
 }
 
 int exec (const char *cmd_line){
-
-	//존재 여부 체크 필요
-
-	int command_length = strlen (cmd_line);
-	char argv[command_length+1];
-	//char *token, *save_ptr;
-	strlcpy (argv, cmd_line, command_length+1);
-
-	//나눌 필요는 없는듯
-	/*for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
-	{	
-		size_t argsize = strlen (token) + 1;
-	}*/
-
-	if(process_exec(argv) == -1){
-		return -1;
-	}
-
+	return process_exec (cmd_line);
 }
 
-int wait (pid_t pid){
+int wait (tid_t pid){
 
 	struct list_elem *i;
 	int tag = 0;
@@ -179,15 +196,14 @@ int read (int fd, void *buffer, unsigned size) {
 	return file_read (file, buffer, size);
 }
 
-
-void
+int 
 write (int fd, const void *buffer, unsigned length) {
 	if (fd == 1) {
 		putbuf (buffer, length);
 	}
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
-	file_write (file, buffer, length);
+	return (int) file_write (file, buffer, length);
 }
 
 void

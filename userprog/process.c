@@ -88,8 +88,12 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
+	void *argv[2];
+	argv[0] = thread_current ();
+	argv[1] = if_;
+
 	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+			PRI_DEFAULT, __do_fork, argv);
 }
 
 #ifndef VM
@@ -131,10 +135,10 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
+	struct thread *parent = (struct thread *) (*(void **)aux);
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = (struct intr_frame *) (*((void **)aux + 8));
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -162,6 +166,17 @@ __do_fork (void *aux) {
 	 * TODO:       the resources of parent.*/
 
 	process_init ();
+
+	/* Duplicate file descriptor. */
+	struct list_elem *i;
+	for (i = list_begin (&parent->desc_table); i != list_end (&parent->desc_table); i = list_next (i)) {
+		struct fdesc *fd = list_entry (i, struct fdesc, elem);
+		if (fd->desc_no == 0 || fd->desc_no == 1) continue;
+		struct fdesc *dup_fd = malloc (sizeof (struct fdesc));
+		dup_fd->desc_no = fd->desc_no;
+		dup_fd->file = file_duplicate (fd->file);
+		list_push_back (&current->desc_table, &dup_fd->elem);
+	}
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
