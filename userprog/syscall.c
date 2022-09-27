@@ -9,9 +9,17 @@
 #include "intrinsic.h"
 #include "threads/mmu.h"
 #include "lib/user/syscall.h"
+#include "threads/init.h"
+#include <list.h>
+
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "malloc.h"
+#include "lib/kernel/stdio.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
 
 /* System call.
  *
@@ -45,6 +53,113 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	printf ("system call!\n");
 	thread_exit ();
+}
+
+bool create (const char *file, unsigned initial_size) {
+	return filesys_create (file, initial_size);
+}
+
+bool remove (const char *file) {
+	return filesys_remove (file);
+}
+
+
+int open (const char *file) {
+	struct file *FD;
+	struct fdesc *fd = malloc (sizeof(struct fdesc));
+	struct thread *curr = thread_current ();
+
+	enum intr_level old_level;
+	old_level = intr_disable ();
+	FD = filesys_open (file);
+	if (FD == NULL) {
+		return -1;
+	}
+	list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem);
+	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
+	fd->file = FD;
+	list_push_back (&curr->desc_table, &fd->elem);
+
+	return fd->desc_no;
+}
+
+struct file*
+get_file_with_fd (int fd){
+	if (fd == 0 || fd == 1) {
+		return false;
+	}
+	struct thread *curr = thread_current ();
+	struct list_elem *i;
+	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
+		if (list_entry (i, struct fdesc, elem)->desc_no == fd) {
+			return list_entry (i, struct fdesc, elem)->file;
+		}
+	}
+	return NULL;
+}
+
+
+int filesize (int fd) {
+	int fd_ = fd;
+	struct file* file = get_file_with_fd (fd);
+	if (file == NULL) return -1;
+	return (int) file_length (file);
+}
+
+int read (int fd, void *buffer, unsigned size) {
+	if (fd == 0) return input_getc();
+	struct file* file = get_file_with_fd (fd);
+	if (file == NULL) return -1;
+
+	return file_read (file, buffer, size);
+}
+
+
+void
+write (int fd, const void *buffer, unsigned length) {
+	if (fd == 1) {
+		putbuf (buffer, length);
+	}
+	struct file* file = get_file_with_fd (fd);
+	if (file == NULL) return -1;
+	file_write (file, buffer, length);
+}
+
+void
+seek (int fd, unsigned position) {
+	struct file* file = get_file_with_fd (fd);
+	if (file == NULL) return -1;
+	
+	file_seek (file, position);
+}
+
+unsigned tell (int fd) {
+	struct file* file = get_file_with_fd (fd);
+	if (file == NULL) return -1;
+
+	file_tell (file);
+}
+
+void close (int fd) {
+	if (fd == 0 || fd == 1) {
+		return;
+	}
+	struct fdesc *fd_ = NULL;
+	struct thread *curr = thread_current ();
+	struct list_elem *i;
+	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
+		if (list_entry (i, struct fdesc, elem)->desc_no == fd) {
+			fd_ = list_entry (i, struct fdesc, elem);
+			break;
+		}
+	}
+	if (i == list_end (&curr->desc_table)) {
+		return;
+	}
+	else {
+		list_remove (&fd_->elem);
+		file_close (fd_->file);
+	}
 }
 
 void halt (void){
@@ -93,21 +208,3 @@ int wait (pid_t pid){
 
 	return process_wait(pid);
 }
-
-bool create (const char *file, unsigned initial_size);
-
-bool remove (const char *file);
-
-int open (const char *file);
-
-int filesize (int fd);
-
-int read (int fd, void *buffer, unsigned size);
-
-int write (int fd, const void *buffer, unsigned size);
-
-void seek (int fd, unsigned position);
-
-unsigned tell (int fd);
-
-void close (int fd);
