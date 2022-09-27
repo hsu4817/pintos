@@ -692,7 +692,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->waiting = NULL;
 	t->parent = NULL;
 	t->parent_sema = NULL;
-	
+
 	list_init(&t->holding_locks);
 	t->child_exit_status = -1;
 }

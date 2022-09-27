@@ -423,7 +423,7 @@ load (const char *file_name, struct intr_frame *if_) {
 		printf ("Command is too long\n");
 		goto done;
 	}
-	
+	printf ("Loading '%s'\n", new_file_name);
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
