@@ -53,42 +53,60 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	int syscall_no = f->R.rax;
+	enum intr_level old_level;
+	int syscall_no = (int) f->R.rax;
+	old_level = intr_disable ();
 
 	switch (syscall_no) {
 		case SYS_HALT:
 			halt ();
+			break;
 		case SYS_EXIT:
 			exit ((int) f->R.rdi);
+			break;
 		case SYS_FORK:
 			f->R.rax = fork ((char *) f->R.rdi, (struct intr_frame *) f->R.rsi);
+			break;
 		case SYS_EXEC:
 			f->R.rax = exec ((char *) f->R.rdi);
+			break;
 		case SYS_WAIT:
 			f->R.rax = wait ((int) f->R.rdi);
+			break;
 		case SYS_CREATE:
 			f->R.rax = create ((char *) f->R.rdi, (unsigned int) f->R.rsi);
+			break;
 		case SYS_REMOVE:
 			f->R.rax = remove ((char *) f->R.rdi);
+			break;
 		case SYS_OPEN:
 			f->R.rax = open ((char *) f->R.rdi);
+			break;
 		case SYS_FILESIZE:
 			f->R.rax = filesize ((int) f->R.rdi);
+			break;
 		case SYS_READ:
 			f->R.rax = read ((int) f->R.rdi, (void *) f->R.rsi, (unsigned int) f->R.rdx);
+			break;
 		case SYS_WRITE:
 			f->R.rax = write ((int) f->R.rdi, (void *) f->R.rsi, (unsigned int) f->R.rdx);
+			break;
 		case SYS_SEEK:
 			seek ((int) f->R.rdi, (unsigned int) f->R.rsi);
+			break;
 		case SYS_TELL:
 			f->R.rax = tell ((int) f->R.rdi);
+			break;
 		case SYS_CLOSE:
 			close ((int) f->R.rdi);
+			break;
 		default:
 			printf ("system call!\n");
 			// printf ("system call with invalid number %d\n", syscall_no);
 			thread_exit ();
 	}
+
+	intr_set_level (old_level);
 }
 
 

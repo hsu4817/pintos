@@ -155,7 +155,11 @@ page_fault (struct intr_frame *f) {
 			not_present ? "not present" : "rights violation",
 			write ? "writing" : "reading",
 			user ? "user" : "kernel");
-	if (!user) PANIC ("Kernel bug");
+	if (!user) {
+		if (is_timer ()) PANIC ("page fault while timer interrupt.\n");
+		PANIC ("kernel page fault.\n");
+	}
+	
 	kill (f);
 }
 

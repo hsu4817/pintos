@@ -397,7 +397,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 	
 	enum intr_level old_level;
-	old_level = intr_disable ();
+	old_level = intr_disable (); //Interrupt off.
 
 	size_t command_length = strlen (file_name);
 	char *argv = palloc_get_page (0);
@@ -416,7 +416,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	ASSERT (new_file_name != NULL);
 
 	strlcpy (new_file_name, front, file_name_length+1);
-	intr_set_level (old_level);
+	
+	intr_set_level (old_level); //Interrupt on.
 
 	if (command_length > 4096)
 	{
@@ -512,6 +513,9 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	printf ("argument passing...\n");
+	enum intr_level oold_level = intr_disable (); //Interrupt off.
+
 	char *token, *save_ptr;
 	
 	int argc = 0;
@@ -542,11 +546,15 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 	*((char *) p) = (char *) NULL;
 	success = true;
+
+	intr_set_level (old_level); //Interrupt on.
+	printf("argument passing done.\n");
 done:
 	/* We arrive here whether the load is successful or not. */
 	palloc_free_page (argv);
 	palloc_free_page (new_file_name);
 	file_close (file);
+	
 	return success;
 }
 

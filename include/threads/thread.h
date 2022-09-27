@@ -146,6 +146,7 @@ void thread_init (void);
 void thread_start (void);
 
 void thread_tick (void);
+bool is_timer (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);

@@ -61,7 +61,9 @@ int load_avg = 0;
 int f = (1<<14);
 int load_avg_called = 0;
 int recent_avg_called = 0;
- 
+
+bool on_timer = false;
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -167,6 +169,8 @@ thread_tick (void) {
 #endif
 	else
 		kernel_ticks++;
+	
+	on_timer = true;
 
 	/* Update left ticks to sleep for all threads in sleeping list. If it is equal or less then 0, wake up it. */
 	if (!list_empty(&sleeping_list)){
@@ -188,9 +192,8 @@ thread_tick (void) {
 	
 	//mlfqs load_avg, recent_avg recount
 
-	load_avg_called = 0;
-
 	if(thread_mlfqs){
+		load_avg_called = 0;
 
 		if(t != idle_thread){
 			if(idle_thread->status != THREAD_RUNNING){
@@ -240,8 +243,12 @@ thread_tick (void) {
 		}
 	}
 	/* Enforce preemption. */
-		if (++thread_ticks >= TIME_SLICE)
-		intr_yield_on_return ();
+	if (++thread_ticks >= TIME_SLICE) intr_yield_on_return ();
+	on_timer = false;
+}
+
+bool is_timer (void) {
+	return on_timer;
 }
 
 /* Prints thread statistics. */
@@ -704,14 +711,17 @@ init_thread (struct thread *t, const char *name, int priority) {
    idle_thread. */
 static struct thread *
 next_thread_to_run (void) {
+	enum intr_level old_level = intr_disable ();
+	struct thread *next;
 	if (list_empty (&ready_list)){
-		return idle_thread;
+		next = idle_thread;
 	}
 	else {
-		struct thread* next = list_entry(list_max(&ready_list, less_priority, NULL), struct thread, elem);
+		next = list_entry(list_max(&ready_list, less_priority, NULL), struct thread, elem);
 		list_remove(&next->elem);
-		return next;
 	}
+	intr_set_level (old_level);
+	return next;
 }
 
 // input: thread list , output: max priority thread of the given list
