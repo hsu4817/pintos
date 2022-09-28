@@ -109,8 +109,8 @@ struct thread {
 	struct list childs;					/* children processes*/
 	struct list_elem elem_child;
 	struct thread *parent;				/*parent process*/
-	struct semaphore *parent_sema;		/*parent's sema*/
-	int child_exit_status;				/*child's exit status*/
+	struct semaphore *wait_sema;		/* Semaphore for process wait. */
+	int exit_status;					/* Exit status of thread. default is 0. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -133,6 +133,14 @@ struct fdesc
 	int desc_no;
 	struct file* file;
 	
+	struct list_elem elem;
+};
+
+struct exit_log_t
+{
+	tid_t tid;
+	int exit_status;
+
 	struct list_elem elem;
 };
 
@@ -181,5 +189,9 @@ void thread_set_load_avg (void);
 
 bool less_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
 void do_iret (struct intr_frame *tf);
+
+struct thread *tid_to_thread (tid_t tid);
+int seek_exit_log (tid_t tid);
+void add_exit_log (tid_t tid, int status);
 
 #endif /* threads/thread.h */

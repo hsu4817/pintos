@@ -45,9 +45,11 @@ static struct list destruction_req;
 /* List of processes in THREAD_BLOCKED state */
 static struct list blocked_list;
 
-/* List of sleeping threads */
+/* List of sleeping threads. */
 static struct list sleeping_list;
 
+/* List of zombies. */
+static struct list exit_log;
 
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
@@ -126,8 +128,9 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
-	list_init(&blocked_list);
-	list_init(&sleeping_list);
+	list_init (&blocked_list);
+	list_init (&sleeping_list);
+	list_init (&exit_log);
 	load_avg = 0;
 
 	/* Set up a thread structure for the running thread. */
@@ -699,12 +702,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->waiting = NULL;
 	t->parent = NULL;
-	t->parent_sema = NULL;
+	t->wait_sema = NULL;
 
 	list_init (&t->childs);
 	list_init (&t->desc_table);
 	list_init (&t->holding_locks);
-	t->child_exit_status = -1;
+	t->exit_status = 0;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -901,4 +904,64 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+struct thread *
+tid_to_thread (tid_t tid) {
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+	struct thread *temp = NULL;
+
+	if (tid == thread_current ()->tid) temp = thread_current ();
+
+	struct list_elem *i;
+	for (i = list_begin (&ready_list); i != list_end (&ready_list); i = list_next (i)){
+		if (list_entry (i, struct thread, elem)->tid == tid) temp = list_entry (i, struct thread, elem);
+	}
+	if (i == list_end (&ready_list)) {
+		for (i = list_begin (&blocked_list); i != list_end (&blocked_list); i = list_next (i)){
+			if (list_entry (i, struct thread, elem_blocked)->tid == tid) temp = list_entry (i, struct thread, elem_blocked);
+		}
+	}
+	intr_set_level (old_level);
+	return temp;
+}
+
+int
+seek_exit_log (tid_t tid) {
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
+	int status = -2;
+	struct list_elem *i;
+	struct exit_log_t *log;
+	for (i = list_begin (&exit_log); i != list_end (&exit_log); i = list_next (i)){
+		struct exit_log_t *temp =list_entry (i, struct exit_log_t, elem);
+		if (temp->tid == tid) {
+			list_remove (i);
+			log = temp;
+			status = log->exit_status;
+			free (log);
+			break; 
+		}
+	} 
+	
+	intr_set_level (old_level);
+	return status;
+}
+
+void
+add_exit_log (tid_t tid, int status) {
+	enum intr_level old_level;
+	old_level = intr_disable ();
+	struct exit_log_t *new_exit_log = malloc (sizeof (struct exit_log_t));
+	new_exit_log->exit_status = status;
+	new_exit_log->tid = tid;
+
+	list_push_back (&exit_log, &new_exit_log->elem);
+	intr_set_level (old_level);
+
+
+	
 }

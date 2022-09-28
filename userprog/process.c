@@ -235,27 +235,27 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-
-	struct list_elem *i;
-	struct thread *the_child;
-	int tag = 0;
-
-	for (i = list_begin(&thread_current()->childs); i != list_end(&thread_current()->childs); i = list_next(i)){
-		if(list_entry(i, struct thread, elem_child)->parent->tid == thread_current()->tid){
-			the_child = list_entry(i, struct thread, elem_child);
-			tag = 1;
-			break;
+	struct thread *waitee = tid_to_thread (child_tid);
+	int exit_status;
+	if (waitee == NULL) {
+		// The process was already dead.
+		exit_status = seek_exit_log (child_tid);
+		if (exit_status == -2) {
+			// It was invalid tid or already waited.
+			return -1;
 		}
+		return exit_status;
 	}
-	if(tag == 0){
-		return -1;
-	}
-	struct semaphore wait_sema;
-	sema_init(&wait_sema, 0);
-	the_child->parent_sema = &wait_sema;
-	sema_down(the_child->parent_sema);
+	else {
+		struct semaphore wait_sema;
+		sema_init (&wait_sema, 0);
+		waitee->wait_sema = &wait_sema;
+		sema_down (&wait_sema);
 
-	return thread_current()->child_exit_status;
+		exit_status = seek_exit_log (child_tid);
+		ASSERT (exit_status != -2);
+		return exit_status;
+	}
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -276,10 +276,9 @@ process_exit (void) {
 		free (list_entry (temp, struct fdesc, elem));
 	}
 
-	if (curr->parent != NULL) list_remove(&curr->elem_child);
-	if (curr->parent_sema != NULL) sema_up(curr->parent_sema);
-
-	//메세지 적기
+	add_exit_log (curr->tid, curr->exit_status);
+	printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
+	if (curr->wait_sema != NULL) sema_up (curr->wait_sema);
 
 	process_cleanup ();
 }

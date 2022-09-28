@@ -101,8 +101,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			close ((int) f->R.rdi);
 			break;
 		default:
-			printf ("system call!\n");
-			// printf ("system call with invalid number %d\n", syscall_no);
+			printf ("Unknown syscall number %d.\n", syscall_no);
 			thread_exit ();
 	}
 
@@ -117,8 +116,7 @@ void halt (void){
 void exit (int status){
 
 	//process exit 실패했을 경우도 생각????
-	thread_current()->status = 0;
-	thread_current()->parent->child_exit_status = status;
+	thread_current()->exit_status = status;
 	thread_exit();
 	
 }
