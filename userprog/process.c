@@ -187,6 +187,7 @@ __do_fork (void *aux) {
 
 	process_init ();
 
+	//parent child 관계형성
 	current->parent = parent;
 	list_push_back (&parent->childs, &current->elem_child);
 
@@ -200,6 +201,15 @@ __do_fork (void *aux) {
 		dup_fd->file = file_duplicate (fd->file);
 		list_push_back (&current->desc_table, &dup_fd->elem);
 	}
+
+	/*Duplicate the registers*/
+	if_.R.rbx = parent_if->R.rbx;
+	if_.rsp = parent_if->rsp;
+	if_.R.rbp = parent_if->R.rbp;
+	if_.R.r12 = parent_if->R.r12;
+	if_.R.r13 = parent_if->R.r13;
+	if_.R.r14 = parent_if->R.r14;
+	if_.R.r15 = parent_if->R.r15;
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
