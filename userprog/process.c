@@ -146,6 +146,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	else{
 		writable = false;
 	}
+
 	memcpy(newpage, parent_page, PGSIZE);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
@@ -166,14 +167,25 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) (*(void **)aux);
+	struct thread *parent = (struct thread *) ((void**)aux)[0];
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if = (struct intr_frame *) (*((void **)aux + 8));
+	struct intr_frame *parent_if = (struct intr_frame *) ((void**)aux)[1];
 	bool succ = true;
+
+	enum intr_level old_level;
+	old_level = intr_disable ();
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	current->tf.rsp = if_.rsp;
+	current->tf.R.rbx = if_.R.rbx;
+	current->tf.R.rbp = if_.R.rbp;
+	current->tf.R.r12 = if_.R.r12;
+	current->tf.R.r13 = if_.R.r13;
+	current->tf.R.r14 = if_.R.r14;
+	current->tf.R.r15 = if_.R.r15;
+
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -211,20 +223,13 @@ __do_fork (void *aux) {
 		dup_fd->desc_no = fd->desc_no;
 		dup_fd->file = file_duplicate (fd->file);
 		list_push_back (&current->desc_table, &dup_fd->elem);
-	}
-
-	/*Duplicate the registers*/
-	if_.R.rbx = parent_if->R.rbx;
-	if_.rsp = parent_if->rsp;
-	if_.R.rbp = parent_if->R.rbp;
-	if_.R.r12 = parent_if->R.r12;
-	if_.R.r13 = parent_if->R.r13;
-	if_.R.r14 = parent_if->R.r14;
-	if_.R.r15 = parent_if->R.r15;
+	}	
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret (&if_);
+	
+	intr_set_level (old_level);
 error:
 	thread_exit ();
 }
@@ -287,10 +292,12 @@ process_wait (tid_t child_tid UNUSED) {
 		return exit_status;
 	}
 	else {
-		struct semaphore wait_sema;
-		sema_init (&wait_sema, 0);
-		waitee->wait_sema = &wait_sema;
-		sema_down (&wait_sema);
+		struct semaphore *wait_sema = malloc (sizeof(struct semaphore));
+		sema_init (wait_sema, 0);
+		waitee->wait_sema = wait_sema;
+		sema_down (wait_sema);
+		free (wait_sema);
+		waitee->wait_sema = NULL;
 
 		exit_status = seek_exit_log (child_tid);
 		ASSERT (exit_status != -2);
