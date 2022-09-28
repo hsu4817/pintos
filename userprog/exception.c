@@ -150,8 +150,8 @@ page_fault (struct intr_frame *f) {
 	page_fault_cnt++;
 
 	/* May be editted later on project 3 */
-	thread_current ()->exit_status = -1;
-	thread_exit ();
+	//thread_current ()->exit_status = -1;
+	//thread_exit ();
 
 	/* If the fault is true fault, show info and exit. */
 	printf ("Page fault at %p: %s error %s page in %s context.\n",
@@ -159,10 +159,7 @@ page_fault (struct intr_frame *f) {
 			not_present ? "not present" : "rights violation",
 			write ? "writing" : "reading",
 			user ? "user" : "kernel");
-	if (!user) {
-		if (is_timer ()) PANIC ("page fault while timer interrupt.\n");
-		PANIC ("kernel page fault.\n");
-	}
+
 	kill (f);
 }
 

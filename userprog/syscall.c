@@ -13,7 +13,7 @@
 
 #include "filesys/file.h"
 #include "filesys/filesys.h"
-#include "threads/malloc.h"
+#include "threads/palloc.h"
 #include "lib/kernel/stdio.h"
 #include "userprog/process.h"
 
@@ -53,9 +53,7 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	enum intr_level old_level;
 	int syscall_no = (int) f->R.rax;
-	old_level = intr_disable ();
 
 	switch (syscall_no) {
 		case SYS_HALT:
@@ -104,21 +102,18 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			printf ("Unknown syscall number %d.\n", syscall_no);
 			thread_exit ();
 	}
-
-	intr_set_level (old_level);
 }
 
 
 void halt (void){
-	power_off();
+	power_off ();
+	printf("must not be called");
 }
 
 void exit (int status){
-
 	//process exit 실패했을 경우도 생각????
 	thread_current()->exit_status = status;
 	thread_exit();
-	
 }
 
 tid_t fork (const char *thread_name, struct intr_frame *if_){
@@ -135,12 +130,12 @@ tid_t fork (const char *thread_name, struct intr_frame *if_){
 }
 
 int exec (const char *cmd_line){
-	/*
-	int command_length = strlen (cmd_line);
-	char argv (command_length);
-	strlcpy ((argv, cmd_line), command_length+1);
-	*/
-	return process_exec (cmd_line);
+	char *fn_copy = palloc_get_page (0);
+	if (fn_copy == NULL)
+		return TID_ERROR;
+	strlcpy (fn_copy, cmd_line, PGSIZE);
+	if (process_exec (fn_copy) == -1) palloc_free_page (fn_copy);
+	exit (-1);
 }
 
 int wait (tid_t pid){
@@ -162,6 +157,8 @@ int wait (tid_t pid){
 }
 
 bool create (const char *file, unsigned initial_size) {
+	if (file == NULL) exit (-1);
+	if (file == "") exit (-1);
 	return filesys_create (file, initial_size);
 }
 
@@ -175,12 +172,16 @@ int open (const char *file) {
 	struct fdesc *fd = malloc (sizeof(struct fdesc));
 	struct thread *curr = thread_current ();
 
-	enum intr_level old_level;
-	old_level = intr_disable ();
+	if (file == NULL) exit (-1);
+	if (file == "") exit (-1);
+
 	FD = filesys_open (file);
 	if (FD == NULL) {
 		return -1;
 	}
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
 	fd->file = FD;
 	list_push_back (&curr->desc_table, &fd->elem);
@@ -224,6 +225,7 @@ int
 write (int fd, const void *buffer, unsigned length) {
 	if (fd == 1) {
 		putbuf (buffer, length);
+		return;
 	}
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
