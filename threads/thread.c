@@ -708,6 +708,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init (&t->desc_table);
 	list_init (&t->holding_locks);
 	t->exit_status = 0;
+	t->is_kernel = true;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

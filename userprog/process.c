@@ -44,6 +44,8 @@ process_init (void) {
 	
 	list_push_back (&current->desc_table, &stdinput->elem);
 	list_push_back (&current->desc_table, &stdoutput->elem);
+
+	current->is_kernel = false;
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -277,7 +279,7 @@ process_exit (void) {
 	}
 
 	add_exit_log (curr->tid, curr->exit_status);
-	printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
+	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	if (curr->wait_sema != NULL) sema_up (curr->wait_sema);
 
 	process_cleanup ();
@@ -414,7 +416,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	ASSERT (new_file_name != NULL);
 
 	strlcpy (new_file_name, front, file_name_length+1);
-	
+	strlcpy (thread_current()->name, new_file_name, file_name_length+1);
+
 	intr_set_level (old_level); //Interrupt on.
 
 	if (command_length > 4096)
@@ -515,7 +518,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	char *token, *save_ptr;
 	
 	int argc = 0;
-	unsigned long long p = USER_STACK;
+	unsigned long long p = if_->rsp;
 
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{	
@@ -524,25 +527,26 @@ load (const char *file_name, struct intr_frame *if_) {
 		p -= argsize;
 	}
 	p =  p & ~7; // World align
+	unsigned long long p_p = p;
+
 	p = p - 8*(argc+1); // Go to top of the user stack.
 	*((void **) (p-8)) = NULL; // Pushing fault retunr address.
 
-	if_->R.rsi = p;
+	if_->R.rsi = p; // p = argv
 	if_->R.rdi = argc;
-
+	if_->rsp = p-8;
 	strlcpy (argv, file_name, command_length+1);
-	unsigned long long p_p = USER_STACK;
+
 	for (token = strtok_r (argv, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
 	{
 		size_t argsize = strlen (token) + 1;
-		p_p -= argsize;
 		strlcpy((char *) p_p, token, argsize);
-		memcpy ((char **) p, &p_p, 8); //p_p에는 arg의 시작 주소가 있음 (char*). p가 저장하고 있는 주소에 p_p의 값을 복사해야 함
-		printf("Copied %s to %p.\n", (char *) p_p, (char *) p_p);
-		printf("Stored %p to %p.\n", (char *) p_p, (char **) p);
+		memcpy ((char **) p, &p_p, 8); //p = &(argv[i])
+		p_p += argsize; // p_p = argv[i]
 		p += 8;
 	}
 	*(char **)p = NULL;
+	
 	success = true;
 
 	intr_set_level (old_level); //Interrupt on.

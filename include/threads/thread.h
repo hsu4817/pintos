@@ -111,6 +111,7 @@ struct thread {
 	struct thread *parent;				/*parent process*/
 	struct semaphore *wait_sema;		/* Semaphore for process wait. */
 	int exit_status;					/* Exit status of thread. default is 0. */
+	bool is_kernel;						/* True when the thread is kernel thread. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
