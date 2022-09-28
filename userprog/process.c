@@ -60,6 +60,7 @@ process_init (void) {
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
+	char *thread_name;
 	tid_t tid;
 
 	/* Make a copy of FILE_NAME.
@@ -68,11 +69,21 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+	thread_name = palloc_get_page (0);
+	if (thread_name == NULL) return TID_ERROR;
+	strlcpy (thread_name, file_name , PGSIZE);
+	
+	char *tocken, *save_ptr;
+	tocken = strtok_r(thread_name, " ", &save_ptr);
 
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (tocken, PRI_DEFAULT, initd, fn_copy);
+
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
+
+	palloc_free_page (thread_name);
+	
 	return tid;
 }
 
@@ -433,7 +444,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	ASSERT (new_file_name != NULL);
 
 	strlcpy (new_file_name, front, file_name_length+1);
-	strlcpy (thread_current()->name, new_file_name, file_name_length+1);
 
 	intr_set_level (old_level); //Interrupt on.
 
@@ -566,7 +576,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	
 	success = true;
 
-	intr_set_level (old_level); //Interrupt on.
+	intr_set_level (oold_level); //Interrupt on.
 done:
 	/* We arrive here whether the load is successful or not. */
 	palloc_free_page (argv);
