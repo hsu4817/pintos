@@ -14,8 +14,12 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "lib/kernel/stdio.h"
 #include "userprog/process.h"
+#include "lib/string.h"
+#include "devices/input.h"
+
 
 
 void syscall_entry (void);
@@ -134,8 +138,7 @@ int exec (const char *cmd_line){
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, cmd_line, PGSIZE);
-	if (process_exec (fn_copy) == -1) palloc_free_page (fn_copy);
-	exit (-1);
+	if (process_exec (fn_copy) == -1) exit (-1);
 }
 
 int wait (tid_t pid){
@@ -158,7 +161,7 @@ int wait (tid_t pid){
 
 bool create (const char *file, unsigned initial_size) {
 	if (file == NULL) exit (-1);
-	if (file == "") exit (-1);
+	if (*file == '\0') exit (-1);
 	return filesys_create (file, initial_size);
 }
 
@@ -173,7 +176,7 @@ int open (const char *file) {
 	struct thread *curr = thread_current ();
 
 	if (file == NULL) exit (-1);
-	if (file == "") exit (-1);
+	if (*file == '\0') exit (-1);
 
 	FD = filesys_open (file);
 	if (FD == NULL) {
@@ -225,7 +228,7 @@ int
 write (int fd, const void *buffer, unsigned length) {
 	if (fd == 1) {
 		putbuf (buffer, length);
-		return;
+		return length;
 	}
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;

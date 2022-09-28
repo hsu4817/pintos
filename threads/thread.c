@@ -704,6 +704,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->parent = NULL;
 	t->wait_sema = NULL;
 
+
 	list_init (&t->childs);
 	list_init (&t->desc_table);
 	list_init (&t->holding_locks);
