@@ -714,6 +714,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->exit_status = 0;
 	t->is_kernel = true;
 	t->someone_is_waiting = false;
+	t->fork_success = false;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

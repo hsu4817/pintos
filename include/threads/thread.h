@@ -114,6 +114,7 @@ struct thread {
 	bool is_kernel;						/* True when the thread is kernel thread. */
 	bool someone_is_waiting;			/* Parent called wait. */
 	struct thread *pwaiter;				/* Pwaiter process. */
+	bool fork_success;					/*fork success 1, fail 0*/
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

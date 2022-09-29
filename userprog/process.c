@@ -113,9 +113,14 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 
 	sema_init(argv[2], 0);
 	tid_t checkcheck = thread_create (name, PRI_DEFAULT, __do_fork, argv);
-
+	
+	thread_current()->fork_success = false;
 	sema_down(argv[2]);
 	free(argv[2]);
+
+	if(thread_current()->fork_success == false){
+		return TID_ERROR;
+	}
 
 	return checkcheck;
 }
@@ -233,14 +238,16 @@ __do_fork (void *aux[]) {
 	}
 	intr_set_level (old_level);
 
-	sema_up(aux[2]);
-
 	/* Finally, switch to the newly created process. */
-	if (succ)
+	if (succ){
+		parent->fork_success = true;
+		sema_up(aux[2]);
 		do_iret (&if_);
-	
+	}
 	
 error:
+	current->exit_status = TID_ERROR;
+	sema_up(aux[2]);
 	thread_exit ();
 }
 
