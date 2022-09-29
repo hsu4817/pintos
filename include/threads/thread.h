@@ -108,10 +108,11 @@ struct thread {
 	/*used in process.c and syscall.c*/
 	struct list childs;					/* children processes*/
 	struct list_elem elem_child;
-	struct thread *parent;				/*parent process*/
-	struct semaphore *wait_sema;		/* Semaphore for process wait. */
+	struct thread *parent;				/* Waiter process. */
+	struct semaphore pwait_sema;		/* Semaphore for process wait. */
 	int exit_status;					/* Exit status of thread. default is 0. */
 	bool is_kernel;						/* True when the thread is kernel thread. */
+	bool parent_is_waiting;				/* Parent called wait. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -140,6 +141,7 @@ struct fdesc
 struct exit_log_t
 {
 	tid_t tid;
+	tid_t parent_tid;
 	int exit_status;
 
 	struct list_elem elem;

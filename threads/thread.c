@@ -50,6 +50,7 @@ static struct list sleeping_list;
 
 /* List of zombies. */
 static struct list exit_log;
+static struct lock exit_lock;
 
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
@@ -132,6 +133,8 @@ thread_init (void) {
 	list_init (&sleeping_list);
 	list_init (&exit_log);
 	load_avg = 0;
+
+	lock_init (&exit_lock);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -702,14 +705,14 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->waiting = NULL;
 	t->parent = NULL;
-	t->wait_sema = NULL;
-
+	sema_init (&t->pwait_sema, 0);
 
 	list_init (&t->childs);
 	list_init (&t->desc_table);
 	list_init (&t->holding_locks);
 	t->exit_status = 0;
 	t->is_kernel = true;
+	t->parent_is_waiting = false;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -914,7 +917,7 @@ tid_to_thread (tid_t tid) {
 	old_level = intr_disable ();
 
 	struct thread *temp = NULL;
-
+	// printf ("Thread request for tid %d.\n",tid);
 	if (tid == thread_current ()->tid) temp = thread_current ();
 
 	struct list_elem *i;
@@ -926,44 +929,48 @@ tid_to_thread (tid_t tid) {
 			if (list_entry (i, struct thread, elem_blocked)->tid == tid) temp = list_entry (i, struct thread, elem_blocked);
 		}
 	}
+	// printf ("Successfully returned thread for tid %d.\n",tid);
 	intr_set_level (old_level);
 	return temp;
 }
 
 int
 seek_exit_log (tid_t tid) {
-	enum intr_level old_level;
-	old_level = intr_disable ();
-
+	lock_acquire (&exit_lock);
 	int status = -2;
 	struct list_elem *i;
 	struct exit_log_t *log;
 	for (i = list_begin (&exit_log); i != list_end (&exit_log); i = list_next (i)){
 		struct exit_log_t *temp =list_entry (i, struct exit_log_t, elem);
 		if (temp->tid == tid) {
-			list_remove (i);
-			log = temp;
-			status = log->exit_status;
-			free (log);
-			break; 
+			// check authority to retrieve that exit log.
+			if (thread_current ()->is_kernel || thread_current ()->tid == temp->parent_tid){
+				list_remove (i);
+				log = temp;
+				status = log->exit_status;
+				free (log);
+				break; 
+			}
 		}
 	} 
 	
-	intr_set_level (old_level);
+	lock_release (&exit_lock);
 	return status;
 }
 
 void
 add_exit_log (tid_t tid, int status) {
-	enum intr_level old_level;
-	old_level = intr_disable ();
+	lock_acquire (&exit_lock);
 	struct exit_log_t *new_exit_log = malloc (sizeof (struct exit_log_t));
 	new_exit_log->exit_status = status;
 	new_exit_log->tid = tid;
+	if (thread_current ()->parent != NULL) {
+		new_exit_log->parent_tid = thread_current ()->parent->tid;
+	}
+	else {
+		new_exit_log->parent_tid = -1;
+	}
 
 	list_push_back (&exit_log, &new_exit_log->elem);
-	intr_set_level (old_level);
-
-
-	
+	lock_release (&exit_lock);
 }

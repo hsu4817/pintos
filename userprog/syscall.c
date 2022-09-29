@@ -58,6 +58,8 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	int syscall_no = (int) f->R.rax;
+	enum intr_level old_level;
+	old_level = intr_disable ();
 
 	switch (syscall_no) {
 		case SYS_HALT:
@@ -106,6 +108,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			printf ("Unknown syscall number %d.\n", syscall_no);
 			thread_exit ();
 	}
+	intr_set_level (old_level);
 }
 
 
@@ -131,6 +134,7 @@ tid_t fork (const char *thread_name, struct intr_frame *if_){
 }
 
 int exec (const char *cmd_line){
+	intr_enable ();
 	char *fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
@@ -139,30 +143,21 @@ int exec (const char *cmd_line){
 }
 
 int wait (tid_t pid){
-
-	struct list_elem *i;
-	int tag = 0;
-	for (i = list_begin(&thread_current()->childs); i != list_end(&thread_current()->childs); i = list_next(i)){
-		if(list_entry(i, struct thread, elem_child)->tid == pid){
-			tag = 1;
-			break;
-		}
-	} // 이거 하나로 될라나?
-
-	if(tag == 0){
-		return -1;
-	}
-
-	return process_wait(pid);
+	// printf ("Wait call for %d.\n", pid);
+	return process_wait (pid);
 }
 
 bool create (const char *file, unsigned initial_size) {
 	if (file == NULL) exit (-1);
-	if (*file == '\0') exit (-1);
+	if (*file == '\0') return false;
+	intr_enable ();
 	return filesys_create (file, initial_size);
 }
 
 bool remove (const char *file) {
+	if (file == NULL) exit (-1);
+	if (*file == '\0') return false;
+	intr_enable ();
 	return filesys_remove (file);
 }
 
@@ -172,9 +167,10 @@ int open (const char *file) {
 	struct fdesc *fd = malloc (sizeof(struct fdesc));
 	struct thread *curr = thread_current ();
 
-	if (file == NULL) exit (-1);
-	if (*file == '\0') exit (-1);
+	if (file == NULL) exit(-1);
+	if (*file == '\0') return -1;
 
+	intr_enable ();
 	FD = filesys_open (file);
 	if (FD == NULL) {
 		return -1;
@@ -208,12 +204,16 @@ get_file_with_fd (int fd){
 
 
 int filesize (int fd) {
+	intr_enable ();
+
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 	return (int) file_length (file);
 }
 
 int read (int fd, void *buffer, unsigned size) {
+	intr_enable ();
+
 	if (fd == 0) return input_getc();
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
@@ -223,8 +223,13 @@ int read (int fd, void *buffer, unsigned size) {
 
 int 
 write (int fd, const void *buffer, unsigned length) {
+	intr_enable ();
+
 	if (fd == 1) {
+		enum intr_level old_level;
+		old_level = intr_disable ();
 		putbuf (buffer, length);
+		intr_set_level (old_level);
 		return length;
 	}
 	struct file* file = get_file_with_fd (fd);
@@ -234,6 +239,8 @@ write (int fd, const void *buffer, unsigned length) {
 
 void
 seek (int fd, unsigned position) {
+	intr_enable ();
+
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return;
 	
@@ -241,6 +248,8 @@ seek (int fd, unsigned position) {
 }
 
 unsigned tell (int fd) {
+	intr_enable ();
+
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 
@@ -248,6 +257,7 @@ unsigned tell (int fd) {
 }
 
 void close (int fd) {
+	
 	if (fd == 0 || fd == 1) {
 		return;
 	}
@@ -265,6 +275,7 @@ void close (int fd) {
 	}
 	else {
 		list_remove (&fd_->elem);
+		intr_enable ();
 		file_close (fd_->file);
 	}
 }

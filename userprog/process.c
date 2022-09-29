@@ -281,30 +281,44 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+
 	struct thread *waitee = tid_to_thread (child_tid);
 	int exit_status;
+	
 	if (waitee == NULL) {
-		// The process was already dead.
 		exit_status = seek_exit_log (child_tid);
 		if (exit_status == -2) {
-			// It was invalid tid or already waited.
-			printf ("You waited already called process.\n");
+			// It was invalid tid or already waited, or current thread have no authority to wait that exit log.
 			return -1;
 		}
-		return exit_status;
 	}
 	else {
-		struct semaphore *wait_sema = malloc (sizeof(struct semaphore));
-		sema_init (wait_sema, 0);
-		waitee->wait_sema = wait_sema;
-		sema_down (wait_sema);
-		free (wait_sema);
-		waitee->wait_sema = NULL;
+		// The process was not dead.
+		// If current thread is user process, check authority.
+		struct thread* curr = thread_current ();
+		struct list_elem *i;
 
+		if (!curr->is_kernel){
+			// printf ("If %d is kernel, this could not printed.\n", curr->tid);
+			for (i = list_begin(&curr->childs); i != list_end(&curr->childs); i = list_next(i)){
+				if (list_entry(i, struct thread, elem_child)->tid == child_tid){
+					// authority checked.
+					break;
+				}
+			} 
+			if (i == list_end (&curr->childs)) {
+				// Access denied.
+				// printf ("Not A Child.\n");
+				return -1; 
+			}
+		}
+		// printf ("Wait until waitee exit.\n");
+		waitee->parent_is_waiting = true;
+		sema_down (&curr->pwait_sema);
 		exit_status = seek_exit_log (child_tid);
 		ASSERT (exit_status != -2);
-		return exit_status;
 	}
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -315,7 +329,9 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	
+
+	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
+	add_exit_log (curr->tid, curr->exit_status);
 
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
@@ -325,9 +341,9 @@ process_exit (void) {
 		free (list_entry (temp, struct fdesc, elem));
 	}
 
-	add_exit_log (curr->tid, curr->exit_status);
-	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
-	if (curr->wait_sema != NULL) sema_up (curr->wait_sema);
+	// printf ("%d try sema up.\n", curr->tid);
+	if (curr->parent_is_waiting) sema_up (&curr->parent->pwait_sema);
+	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	process_cleanup ();
 }
