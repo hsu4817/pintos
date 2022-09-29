@@ -115,6 +115,7 @@ struct thread {
 	bool someone_is_waiting;			/* Parent called wait. */
 	struct thread *pwaiter;				/* Pwaiter process. */
 	bool fork_success;					/*fork success 1, fail 0*/
+	struct semaphore fork_sema;			/*fork semaphore*/
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

@@ -106,17 +106,14 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
-	void *argv[3];
+	void *argv[2];
 	argv[0] = thread_current ();
 	argv[1] = if_;
-	argv[2] = malloc(sizeof(struct semaphore));
 
-	sema_init(argv[2], 0);
 	thread_current()->fork_success = false;
 	tid_t checkcheck = thread_create (name, PRI_DEFAULT, __do_fork, argv);
 	
-	sema_down(argv[2]);
-	free(argv[2]);
+	sema_down(&thread_current()->fork_sema);
 
 	if(thread_current()->fork_success == false){
 		return TID_ERROR;
@@ -241,13 +238,13 @@ __do_fork (void *aux[]) {
 	/* Finally, switch to the newly created process. */
 	if (succ){
 		parent->fork_success = true;
-		sema_up(aux[2]);
+		sema_up(&parent->fork_sema);
 		do_iret (&if_);
 	}
 	
 error:
 	current->exit_status = TID_ERROR;
-	sema_up(aux[2]);
+	sema_up(&parent->fork_sema);
 	thread_exit ();
 }
 
@@ -299,6 +296,9 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 
 	// if (child_tid == NULL) return -1;
+	enum intr_level old_level;
+	old_level = intr_disable ();
+
 	struct thread *waitee = tid_to_thread (child_tid);
 	int exit_status;
 	
@@ -336,6 +336,7 @@ process_wait (tid_t child_tid UNUSED) {
 		exit_status = seek_exit_log (child_tid);
 		ASSERT (exit_status != -2);
 	}
+	intr_set_level (old_level);
 	return exit_status;
 }
 

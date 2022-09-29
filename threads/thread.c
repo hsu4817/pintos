@@ -715,6 +715,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->is_kernel = true;
 	t->someone_is_waiting = false;
 	t->fork_success = false;
+	sema_init(&t->fork_sema, 0);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -924,13 +925,17 @@ tid_to_thread (tid_t tid) {
 
 	struct list_elem *i;
 	for (i = list_begin (&ready_list); i != list_end (&ready_list); i = list_next (i)){
-		if (list_entry (i, struct thread, elem)->tid == tid) temp = list_entry (i, struct thread, elem);
-		break;
+		if (list_entry (i, struct thread, elem)->tid == tid) {
+			temp = list_entry (i, struct thread, elem);
+			break;
+		}
 	}
 	if (i == list_end (&ready_list)) {
 		for (i = list_begin (&blocked_list); i != list_end (&blocked_list); i = list_next (i)){
-			if (list_entry (i, struct thread, elem_blocked)->tid == tid) temp = list_entry (i, struct thread, elem_blocked);
-			break;
+			if (list_entry (i, struct thread, elem_blocked)->tid == tid) {
+				temp = list_entry (i, struct thread, elem_blocked);
+				break;
+			}
 		}
 	}
 	// printf ("Successfully returned thread for tid %d.\n",tid);
