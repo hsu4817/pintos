@@ -217,6 +217,7 @@ int read (int fd, void *buffer, unsigned size) {
 	if (fd == 0) return input_getc();
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
+	file_deny_write (file);
 
 	return file_read (file, buffer, size);
 }
