@@ -136,8 +136,7 @@ tid_t fork (const char *thread_name, struct intr_frame *if_){
 int exec (const char *cmd_line){
 	intr_enable ();
 	char *fn_copy = palloc_get_page (0);
-	if (fn_copy == NULL)
-		return TID_ERROR;
+	if (fn_copy == NULL) exit (-1);
 	strlcpy (fn_copy, cmd_line, PGSIZE);
 	if (process_exec (fn_copy) == -1) exit (-1);
 }

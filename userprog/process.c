@@ -539,6 +539,8 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	file_deny_write (file);
+
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++) {
@@ -598,6 +600,8 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
+
+	file_allow_write (file);
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
