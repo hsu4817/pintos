@@ -112,9 +112,9 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	argv[2] = malloc(sizeof(struct semaphore));
 
 	sema_init(argv[2], 0);
+	thread_current()->fork_success = false;
 	tid_t checkcheck = thread_create (name, PRI_DEFAULT, __do_fork, argv);
 	
-	thread_current()->fork_success = false;
 	sema_down(argv[2]);
 	free(argv[2]);
 
