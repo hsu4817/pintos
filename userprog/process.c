@@ -28,7 +28,7 @@
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
-static void __do_fork (void *);
+static void __do_fork (void *aux[]);
 
 /* General process initializer for initd and other process. */
 static void
@@ -110,8 +110,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	argv[0] = thread_current ();
 	argv[1] = if_;
 
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, argv);
+	return thread_create (name, PRI_DEFAULT, __do_fork, argv);
 }
 
 #ifndef VM
@@ -165,12 +164,12 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
 static void
-__do_fork (void *aux) {
+__do_fork (void *aux[]) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) ((void**)aux)[0];
+	struct thread *parent = (struct thread *) aux[0];
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if = (struct intr_frame *) ((void**)aux)[1];
+	struct intr_frame *parent_if = (struct intr_frame *) aux[1];
 	bool succ = true;
 
 	enum intr_level old_level;
@@ -185,6 +184,7 @@ __do_fork (void *aux) {
 	current->tf.R.r13 = if_.R.r13;
 	current->tf.R.r14 = if_.R.r14;
 	current->tf.R.r15 = if_.R.r15;
+	if_.R.rax = 0;
 
 
 	/* 2. Duplicate PT */
@@ -223,13 +223,14 @@ __do_fork (void *aux) {
 		dup_fd->desc_no = fd->desc_no;
 		dup_fd->file = file_duplicate (fd->file);
 		list_push_back (&current->desc_table, &dup_fd->elem);
-	}	
+	}
+	intr_set_level (old_level);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret (&if_);
 	
-	intr_set_level (old_level);
+	
 error:
 	thread_exit ();
 }
@@ -287,6 +288,7 @@ process_wait (tid_t child_tid UNUSED) {
 		exit_status = seek_exit_log (child_tid);
 		if (exit_status == -2) {
 			// It was invalid tid or already waited.
+			printf ("You waited already called process.\n");
 			return -1;
 		}
 		return exit_status;

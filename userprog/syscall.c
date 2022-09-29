@@ -67,7 +67,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			exit ((int) f->R.rdi);
 			break;
 		case SYS_FORK:
-			f->R.rax = fork ((char *) f->R.rdi, (struct intr_frame *) f->R.rsi);
+			f->R.rax = fork ((char *) f->R.rdi, f);
 			break;
 		case SYS_EXEC:
 			f->R.rax = exec ((char *) f->R.rdi);
@@ -125,10 +125,7 @@ tid_t fork (const char *thread_name, struct intr_frame *if_){
 	if (forked_child == TID_ERROR) {
 		return -1;
 	}
-	if(thread_current()->tid == forked_child){
-		return 0;
-	}
-	else{
+	else {
 		return forked_child;
 	}
 }
