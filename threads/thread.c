@@ -936,6 +936,9 @@ tid_to_thread (tid_t tid) {
 				temp = list_entry (i, struct thread, elem_blocked);
 				break;
 			}
+			if(i == list_next(i)){
+				break;
+			}
 		}
 	}
 	// printf ("Successfully returned thread for tid %d.\n",tid);
