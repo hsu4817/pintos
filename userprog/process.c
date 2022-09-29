@@ -361,6 +361,8 @@ process_exit (void) {
 	}
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
+	file_close (curr->excutable);
+
 	intr_set_level (old_level);
 
 	struct list_elem *i;
@@ -543,8 +545,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
-	file_deny_write (file);
-
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++) {
@@ -605,12 +605,12 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	file_allow_write (file);
-
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	enum intr_level oold_level = intr_disable (); //Interrupt off.
-
+	t->excutable = file;
+	file_deny_write (file);
+	
 	char *token, *save_ptr;
 	
 	int argc = 0;
@@ -650,7 +650,6 @@ done:
 	/* We arrive here whether the load is successful or not. */
 	palloc_free_page (argv);
 	palloc_free_page (new_file_name);
-	file_close (file);
 	
 	return success;
 }

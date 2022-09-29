@@ -116,6 +116,7 @@ struct thread {
 	struct thread *pwaiter;				/* Pwaiter process. */
 	bool fork_success;					/*fork success 1, fail 0*/
 	struct semaphore fork_sema;			/*fork semaphore*/
+	struct file *excutable;				/* Exucutable of current process. */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

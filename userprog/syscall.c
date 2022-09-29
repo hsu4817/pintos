@@ -228,6 +228,8 @@ write (int fd, const void *buffer, unsigned length) {
 	}
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
+	
+	intr_enable ();
 	return (int) file_write (file, buffer, length);
 }
 
