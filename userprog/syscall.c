@@ -212,25 +212,18 @@ int filesize (int fd) {
 }
 
 int read (int fd, void *buffer, unsigned size) {
-	intr_enable ();
-
 	if (fd == 0) return input_getc();
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
-	file_deny_write (file);
 
+	intr_enable ();
 	return file_read (file, buffer, size);
 }
 
 int 
 write (int fd, const void *buffer, unsigned length) {
-	intr_enable ();
-
 	if (fd == 1) {
-		enum intr_level old_level;
-		old_level = intr_disable ();
 		putbuf (buffer, length);
-		intr_set_level (old_level);
 		return length;
 	}
 	struct file* file = get_file_with_fd (fd);
