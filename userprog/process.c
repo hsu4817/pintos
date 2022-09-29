@@ -351,12 +351,14 @@ process_exit (void) {
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	intr_set_level (old_level);
-	
+
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
 		struct list_elem *temp = i;
 		i = list_next(i);
-		file_close (list_entry (temp, struct fdesc, elem)->file);
+		if (list_entry (temp, struct fdesc, elem)->desc_no > 1){
+			file_close (list_entry (temp, struct fdesc, elem)->file);
+		}
 		free (list_entry (temp, struct fdesc, elem));
 	}
 
