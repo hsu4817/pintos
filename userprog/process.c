@@ -106,11 +106,18 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
-	void *argv[2];
+	void *argv[3];
 	argv[0] = thread_current ();
 	argv[1] = if_;
+	argv[2] = malloc(sizeof(struct semaphore));
 
-	return thread_create (name, PRI_DEFAULT, __do_fork, argv);
+	sema_init(argv[2], 0);
+	tid_t checkcheck = thread_create (name, PRI_DEFAULT, __do_fork, argv);
+
+	sema_down(argv[2]);
+	free(argv[2]);
+
+	return checkcheck;
 }
 
 #ifndef VM
@@ -225,6 +232,8 @@ __do_fork (void *aux[]) {
 		list_push_back (&current->desc_table, &dup_fd->elem);
 	}
 	intr_set_level (old_level);
+
+	sema_up(aux[2]);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
