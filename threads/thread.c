@@ -705,6 +705,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->waiting = NULL;
 	t->parent = NULL;
+	t->pwaiter = NULL;
 	sema_init (&t->pwait_sema, 0);
 
 	list_init (&t->childs);
@@ -712,7 +713,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init (&t->holding_locks);
 	t->exit_status = 0;
 	t->is_kernel = true;
-	t->parent_is_waiting = false;
+	t->someone_is_waiting = false;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -939,16 +940,14 @@ seek_exit_log (tid_t tid) {
 	lock_acquire (&exit_lock);
 	int status = -2;
 	struct list_elem *i;
-	struct exit_log_t *log;
 	for (i = list_begin (&exit_log); i != list_end (&exit_log); i = list_next (i)){
 		struct exit_log_t *temp =list_entry (i, struct exit_log_t, elem);
 		if (temp->tid == tid) {
 			// check authority to retrieve that exit log.
 			if (thread_current ()->is_kernel || thread_current ()->tid == temp->parent_tid){
 				list_remove (i);
-				log = temp;
-				status = log->exit_status;
-				free (log);
+				status = temp->exit_status;
+				free (temp);
 				break; 
 			}
 		}

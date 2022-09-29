@@ -313,7 +313,8 @@ process_wait (tid_t child_tid UNUSED) {
 			}
 		}
 		// printf ("Wait until waitee exit.\n");
-		waitee->parent_is_waiting = true;
+		waitee->someone_is_waiting = true;
+		waitee->pwaiter = curr;
 		sema_down (&curr->pwait_sema);
 		exit_status = seek_exit_log (child_tid);
 		ASSERT (exit_status != -2);
@@ -329,10 +330,19 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	enum intr_level old_level;
+	old_level = intr_disable ();
 	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	add_exit_log (curr->tid, curr->exit_status);
+	// printf ("%d try sema up.\n", curr->tid);
+	if (curr->someone_is_waiting) {
+		curr->someone_is_waiting = false;
+		sema_up (&curr->pwaiter->pwait_sema);
+	}
+	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
+	intr_set_level (old_level);
+	
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
 		struct list_elem *temp = i;
@@ -340,10 +350,6 @@ process_exit (void) {
 		file_close (list_entry (temp, struct fdesc, elem)->file);
 		free (list_entry (temp, struct fdesc, elem));
 	}
-
-	// printf ("%d try sema up.\n", curr->tid);
-	if (curr->parent_is_waiting) sema_up (&curr->parent->pwait_sema);
-	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	process_cleanup ();
 }
