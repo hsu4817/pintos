@@ -291,6 +291,7 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 
+	// if (child_tid == NULL) return -1;
 	struct thread *waitee = tid_to_thread (child_tid);
 	int exit_status;
 	

@@ -143,8 +143,9 @@ int exec (const char *cmd_line){
 }
 
 int wait (tid_t pid){
+	int pid_ = pid;
 	// printf ("Wait call for %d.\n", pid);
-	return process_wait (pid);
+	return process_wait (pid_);
 }
 
 bool create (const char *file, unsigned initial_size) {
