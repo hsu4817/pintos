@@ -263,6 +263,8 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 	
+	enum intr_level old_level = intr_disable ();
+
 	struct thread *curr = thread_current();
 	lock->holder = NULL;
 
@@ -276,7 +278,7 @@ lock_release (struct lock *lock) {
 			}
 		}
 	}
-
+	intr_set_level (old_level);
 	sema_up (&lock->semaphore);
 }
 
@@ -335,11 +337,15 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
+	enum intr_level old_level = intr_disable ();
+
 	sema_init (&waiter.semaphore, 0);
 	list_push_back (&cond->waiters, &waiter.elem);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
+
+	intr_set_level (old_level);
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
@@ -355,6 +361,8 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
+
+	enum intr_level old_level = intr_disable ();
 
 	if (!list_empty (&cond->waiters)){
 		struct list_elem *w;
@@ -380,6 +388,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 
 		sema_up (priori_sema);
 	}
+	intr_set_level (old_level);
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

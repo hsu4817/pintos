@@ -35,6 +35,7 @@ static void
 process_init (void) {
 	struct thread *current = thread_current ();
 
+	enum intr_level old_level = intr_disable ();
 	/* Init stdio and stdout file descriptor. */
 	if (list_empty (&current->desc_table)){
 		struct fdesc *stdinput = malloc (sizeof(struct fdesc));
@@ -50,6 +51,7 @@ process_init (void) {
 	}
 	
 	current->is_kernel = false;
+	intr_set_level (old_level);
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -365,9 +367,11 @@ process_exit (void) {
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
 		struct list_elem *temp = i;
 		i = list_next(i);
+		
 		if (list_entry (temp, struct fdesc, elem)->desc_no > 1){
 			file_close (list_entry (temp, struct fdesc, elem)->file);
 		}
+		list_remove (temp);
 		free (list_entry (temp, struct fdesc, elem));
 	}
 

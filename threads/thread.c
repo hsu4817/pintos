@@ -229,10 +229,6 @@ thread_tick (void) {
 
 				for (i = list_begin(&ready_list); i != list_end(&ready_list); i = list_next(i)){
 					thread_set_priority_mlfqs(list_entry(i, struct thread, elem));
-
-					if(i == list_next(i)){
-							break;
-					}
 				}
 			}
 			
@@ -240,10 +236,6 @@ thread_tick (void) {
 
 				for (i = list_begin(&blocked_list); i != list_end(&blocked_list); i = list_next(i)){
 					thread_set_priority_mlfqs(list_entry(i, struct thread, elem_blocked));
-
-					if(i == list_next(i)){
-							break;
-					}
 				}
 			}
 		}
@@ -308,7 +300,10 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 	
+	enum intr_level old_level = intr_disable ();
 	list_push_back(&blocked_list, &t->elem_blocked);
+	intr_set_level (old_level);
+
 	/* Add to run queue. */
 	thread_unblock (t);
 	thread_yield();
@@ -936,9 +931,6 @@ tid_to_thread (tid_t tid) {
 				temp = list_entry (i, struct thread, elem_blocked);
 				break;
 			}
-			if(i == list_next(i)){
-				break;
-			}
 		}
 	}
 	// printf ("Successfully returned thread for tid %d.\n",tid);
@@ -984,3 +976,4 @@ add_exit_log (tid_t tid, int status) {
 	list_push_back (&exit_log, &new_exit_log->elem);
 	lock_release (&exit_lock);
 }
+
