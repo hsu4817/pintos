@@ -358,16 +358,10 @@ process_exit (void) {
 	if (curr->parent != NULL) {
 		list_remove (&curr->elem_child);
 	}
-	
-	if (curr->someone_is_waiting) {
-		curr->someone_is_waiting = false;
-		sema_up (&curr->pwaiter->pwait_sema);
-	}
+
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	file_close (curr->excutable);
-
-
 
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
@@ -381,9 +375,12 @@ process_exit (void) {
 		list_remove (temp);
 		free (list_entry (temp, struct fdesc, elem));
 	}
+	if (curr->someone_is_waiting) {
+		curr->someone_is_waiting = false;
+		sema_up (&curr->pwaiter->pwait_sema);
+	}
 
 	intr_set_level (old_level);
-
 	process_cleanup ();
 }
 
