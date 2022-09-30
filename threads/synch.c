@@ -130,12 +130,12 @@ sema_up (struct semaphore *sema) {
 		if (thread_get_modified_priority (highest_waiter) > thread_get_modified_priority (thread_current())) need_yield = true;
 	}
 	sema->value++;
-	intr_set_level (old_level);
 
 	if (need_yield){
 		if (intr_context ()) intr_yield_on_return ();
 		else thread_yield ();
 	}
+	intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
@@ -222,10 +222,8 @@ lock_acquire (struct lock *lock) {
 
 	}
 	
-	intr_set_level(old_level);
 	sema_down (&lock->semaphore);
 
-	old_level = intr_disable ();
 	thread_current()->waiting = NULL;
 	lock->holder = thread_current ();
 	lock->donated--;

@@ -355,6 +355,10 @@ process_exit (void) {
 	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	add_exit_log (curr->tid, curr->exit_status);
 	// printf ("%d try sema up.\n", curr->tid);
+	if (curr->parent != NULL) {
+		list_remove (&curr->elem_child);
+	}
+	
 	if (curr->someone_is_waiting) {
 		curr->someone_is_waiting = false;
 		sema_up (&curr->pwaiter->pwait_sema);
@@ -363,11 +367,12 @@ process_exit (void) {
 
 	file_close (curr->excutable);
 
-	intr_set_level (old_level);
+
 
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
 		struct list_elem *temp = i;
+		ASSERT (i != list_next (i));
 		i = list_next(i);
 		
 		if (list_entry (temp, struct fdesc, elem)->desc_no > 1){
@@ -376,6 +381,8 @@ process_exit (void) {
 		list_remove (temp);
 		free (list_entry (temp, struct fdesc, elem));
 	}
+
+	intr_set_level (old_level);
 
 	process_cleanup ();
 }
@@ -608,6 +615,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	enum intr_level oold_level = intr_disable (); //Interrupt off.
+	if (t->excutable != NULL) {
+		file_close (t->excutable);
+	}
 	t->excutable = file;
 	file_deny_write (file);
 	

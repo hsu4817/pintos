@@ -342,6 +342,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
+	ASSERT (intr_get_level () == INTR_OFF);
 	list_remove(&t->elem_blocked);
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
@@ -701,6 +702,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->waiting = NULL;
 	t->parent = NULL;
 	t->pwaiter = NULL;
+	t->excutable = NULL;
 	sema_init (&t->pwait_sema, 0);
 
 	list_init (&t->childs);
@@ -727,6 +729,7 @@ next_thread_to_run (void) {
 	}
 	else {
 		next = list_entry(list_max(&ready_list, less_priority, NULL), struct thread, elem);
+		ASSERT (intr_get_level () == INTR_OFF);
 		list_remove(&next->elem);
 	}
 	intr_set_level (old_level);
@@ -914,12 +917,16 @@ tid_to_thread (tid_t tid) {
 	enum intr_level old_level;
 	old_level = intr_disable ();
 
+	int cnt = 0;
+
 	struct thread *temp = NULL;
 	// printf ("Thread request for tid %d.\n",tid);
 	if (tid == thread_current ()->tid) temp = thread_current ();
 
 	struct list_elem *i;
 	for (i = list_begin (&ready_list); i != list_end (&ready_list); i = list_next (i)){
+		cnt++;
+		ASSERT (cnt < 100);
 		if (list_entry (i, struct thread, elem)->tid == tid) {
 			temp = list_entry (i, struct thread, elem);
 			break;
@@ -927,6 +934,8 @@ tid_to_thread (tid_t tid) {
 	}
 	if (i == list_end (&ready_list)) {
 		for (i = list_begin (&blocked_list); i != list_end (&blocked_list); i = list_next (i)){
+			cnt++;
+			ASSERT (cnt < 100);
 			if (list_entry (i, struct thread, elem_blocked)->tid == tid) {
 				temp = list_entry (i, struct thread, elem_blocked);
 				break;
