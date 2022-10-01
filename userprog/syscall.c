@@ -137,10 +137,11 @@ tid_t fork (const char *thread_name, struct intr_frame *if_){
 
 int exec (const char *cmd_line){
 	intr_enable ();
-	char *fn_copy = palloc_get_page (0);
+	char *fn_copy = palloc_get_page (0); 
 	if (fn_copy == NULL) exit (-1);
 	strlcpy (fn_copy, cmd_line, PGSIZE);
-	if (process_exec (fn_copy) == -1) exit (-1);
+
+	if (process_exec (fn_copy) == -1) exit (-1); //Free the page in process_exec () if exec fail.
 }
 
 int wait (tid_t pid){
@@ -183,6 +184,7 @@ int open (const char *file) {
 
 	if (file == NULL) exit(-1);
 	if (*file == '\0') return -1;
+	if (fd == NULL) return -1;
 
 	lock_acquire(&syslock);
 

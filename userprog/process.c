@@ -31,7 +31,7 @@ static void initd (void *f_name);
 static void __do_fork (void *aux[]);
 
 /* General process initializer for initd and other process. */
-static void
+static bool
 process_init (void) {
 	struct thread *current = thread_current ();
 
@@ -40,7 +40,10 @@ process_init (void) {
 	if (list_empty (&current->desc_table)){
 		struct fdesc *stdinput = malloc (sizeof(struct fdesc));
 		struct fdesc *stdoutput = malloc (sizeof(struct fdesc));
-		
+
+		if (stdinput == NULL) return false;
+		if (stdoutput == NULL) return false;
+
 		stdinput->desc_no = 0;
 		stdinput->file = NULL;
 		stdoutput->desc_no = 1;
@@ -52,6 +55,7 @@ process_init (void) {
 	
 	current->is_kernel = false;
 	intr_set_level (old_level);
+	return true;
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -96,7 +100,10 @@ initd (void *f_name) {
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
-	process_init ();
+	if (!process_init ()){
+		PANIC ("Faile to launch initd\n");
+	}
+	
 
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -114,6 +121,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 
 	thread_current()->fork_success = false;
 	tid_t checkcheck = thread_create (name, PRI_DEFAULT, __do_fork, argv);
+	if (checkcheck == TID_ERROR) return TID_ERROR;
 	
 	sema_down(&thread_current()->fork_sema);
 
@@ -219,7 +227,9 @@ __do_fork (void *aux[]) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 
-	process_init ();
+	if (!process_init ()){
+		goto error;
+	}
 
 	//parent child 관계형성
 	current->parent = parent;
@@ -231,8 +241,14 @@ __do_fork (void *aux[]) {
 		struct fdesc *fd = list_entry (i, struct fdesc, elem);
 		if (fd->desc_no == 0 || fd->desc_no == 1) continue;
 		struct fdesc *dup_fd = malloc (sizeof (struct fdesc));
+		if (dup_fd == NULL) {
+			goto error;
+		}
 		dup_fd->desc_no = fd->desc_no;
 		dup_fd->file = file_duplicate (fd->file);
+		if (dup_fd->file == NULL) {
+			goto error;
+		}
 		list_push_back (&current->desc_table, &dup_fd->elem);
 	}
 	intr_set_level (old_level);
@@ -245,7 +261,7 @@ __do_fork (void *aux[]) {
 	}
 	
 error:
-	current->exit_status = TID_ERROR;
+	current->exit_status = -1;
 	sema_up(&parent->fork_sema);
 	thread_exit ();
 }
@@ -493,15 +509,15 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	
+	char *argv = NULL;
+	char *new_file_name = NULL;
 	
 	enum intr_level old_level;
 	old_level = intr_disable (); //Interrupt off.
 
 	size_t command_length = strlen (file_name);
-	char *argv = palloc_get_page (0);
-	ASSERT (argv != NULL);
-
+	argv = palloc_get_page (0);
+	if (argv == NULL) {goto done;}
 	strlcpy (argv, file_name, PGSIZE);
 
 	size_t file_name_length = 0;
@@ -511,18 +527,17 @@ load (const char *file_name, struct intr_frame *if_) {
 	while (*end != ' ' && *end != '\0') end++;
 	file_name_length = end - front;
 
-	char *new_file_name = palloc_get_page (0);
-	ASSERT (new_file_name != NULL);
-
+	new_file_name = palloc_get_page (0);
+	if (new_file_name == NULL) {goto done;}
 	strlcpy (new_file_name, front, file_name_length+1);
-
-	intr_set_level (old_level); //Interrupt on.
 
 	if (command_length > 4096)
 	{
 		printf ("Command is too long\n");
 		goto done;
 	}
+
+	intr_set_level (old_level);
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -655,9 +670,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	intr_set_level (oold_level); //Interrupt on.
 done:
 	/* We arrive here whether the load is successful or not. */
-	palloc_free_page (argv);
-	palloc_free_page (new_file_name);
-	
+	if (argv != NULL) {palloc_free_page (argv);}
+	if (new_file_name != NULL) {palloc_free_page (new_file_name);}
+
 	return success;
 }
 
