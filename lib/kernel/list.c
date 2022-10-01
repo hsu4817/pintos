@@ -200,6 +200,12 @@ list_push_front (struct list *list, struct list_elem *elem) {
    back in LIST. */
 void
 list_push_back (struct list *list, struct list_elem *elem) {
+	struct list_elem *i;
+	for (i = list_begin (list); i != list_end (list); i = list_next (i)) {
+		if (i == elem){
+			return;
+		}
+	}
 	list_insert (list_end (list), elem);
 }
 
