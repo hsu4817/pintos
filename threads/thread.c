@@ -705,7 +705,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->excutable = NULL;
 	sema_init (&t->pwait_sema, 0);
 
-	list_init (&t->childs);
 	list_init (&t->desc_table);
 	list_init (&t->holding_locks);
 	t->exit_status = 0;
@@ -948,42 +947,65 @@ tid_to_thread (tid_t tid) {
 	return temp;
 }
 
-int
+struct exit_log_t *
 seek_exit_log (tid_t tid) {
 	lock_acquire (&exit_lock);
-	int status = -2;
+	struct exit_log_t *log = NULL;
 	struct list_elem *i;
 	for (i = list_begin (&exit_log); i != list_end (&exit_log); i = list_next (i)){
-		struct exit_log_t *temp =list_entry (i, struct exit_log_t, elem);
+		struct exit_log_t *temp = list_entry (i, struct exit_log_t, elem);
 		if (temp->tid == tid) {
 			// check authority to retrieve that exit log.
 			if (thread_current ()->is_kernel || thread_current ()->tid == temp->parent_tid){
-				list_remove (i);
-				status = temp->exit_status;
-				free (temp);
+				log = temp;
 				break; 
 			}
 		}
 	} 
 	
 	lock_release (&exit_lock);
-	return status;
+	return log;
 }
 
 void
-add_exit_log (tid_t tid, int status) {
+add_exit_log (struct exit_log_t *new_log) {
 	lock_acquire (&exit_lock);
-	struct exit_log_t *new_exit_log = malloc (sizeof (struct exit_log_t));
-	new_exit_log->exit_status = status;
-	new_exit_log->tid = tid;
-	if (thread_current ()->parent != NULL) {
-		new_exit_log->parent_tid = thread_current ()->parent->tid;
+	struct thread *curr = thread_current ();
+
+	new_log->exit_status = -99;
+	new_log->tid = curr->tid;
+	if (curr->parent != NULL) {
+		new_log->parent_tid = curr->parent->tid;
 	}
 	else {
-		new_exit_log->parent_tid = -1;
+		new_log->parent_tid = -1;
 	}
 
-	list_push_back (&exit_log, &new_exit_log->elem);
+	list_push_back (&exit_log, &new_log->elem);
 	lock_release (&exit_lock);
 }
 
+void
+set_exit_log (void) {
+	lock_acquire (&exit_lock);
+
+	struct thread *curr = thread_current ();
+
+	struct list_elem *i;
+	for (i = list_begin (&exit_log); i != list_end (&exit_log); i = list_next (i)){
+		if (list_entry (i, struct exit_log_t, elem)->tid == curr->tid) {
+			list_entry (i, struct exit_log_t, elem)->exit_status = curr->exit_status;
+			break;
+		}
+	}
+	if (!curr->is_kernel) ASSERT (i != list_end (&exit_log));
+
+	lock_release (&exit_lock);
+}
+
+void
+remove_exit_log (struct exit_log_t *log) {
+	lock_acquire (&exit_lock);
+	list_remove (&log->elem);
+	lock_release (&exit_lock);
+}

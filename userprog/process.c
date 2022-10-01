@@ -52,6 +52,12 @@ process_init (void) {
 		list_push_back (&current->desc_table, &stdinput->elem);
 		list_push_back (&current->desc_table, &stdoutput->elem);
 	}
+
+	/* Init exit log. */
+
+	struct exit_log_t *exit_log = malloc (sizeof (struct exit_log_t));
+	if (exit_log == NULL) {return false;}
+	add_exit_log (exit_log);
 	
 	current->is_kernel = false;
 	intr_set_level (old_level);
@@ -227,13 +233,13 @@ __do_fork (void *aux[]) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 
-	if (!process_init ()){
-		goto error;
-	}
 
 	//parent child 관계형성
 	current->parent = parent;
-	list_push_back (&parent->childs, &current->elem_child);
+
+	if (!process_init ()){
+		goto error;
+	}
 
 	/* Duplicate file descriptor. */
 	struct list_elem *i;
@@ -316,44 +322,26 @@ process_wait (tid_t child_tid UNUSED) {
 	// if (child_tid == NULL) return -1;
 	enum intr_level old_level;
 	old_level = intr_disable ();
-
-	struct thread *waitee = tid_to_thread (child_tid);
 	int exit_status;
-	
-	if (waitee == NULL) {
-		exit_status = seek_exit_log (child_tid);
-		if (exit_status == -2) {
-			// It was invalid tid or already waited, or current thread have no authority to wait that exit log.
-			return -1;
-		}
-	}
-	else {
-		// The process was not dead.
-		// If current thread is user process, check authority.
-		struct thread* curr = thread_current ();
-		struct list_elem *i;
 
-		if (!curr->is_kernel){
-			// printf ("If %d is kernel, this could not printed.\n", curr->tid);
-			for (i = list_begin(&curr->childs); i != list_end(&curr->childs); i = list_next(i)){
-				if (list_entry(i, struct thread, elem_child)->tid == child_tid){
-					// authority checked.
-					break;
-				}
-			} 
-			if (i == list_end (&curr->childs)) {
-				// Access denied.
-				// printf ("Not A Child.\n");
-				return -1; 
-			}
+	struct exit_log_t *log = seek_exit_log (child_tid);
+	if (log == NULL) return -1;
+	else {
+		if (log->exit_status == -99){
+			struct thread *waitee = tid_to_thread (child_tid);
+			ASSERT (waitee != NULL);
+
+			waitee->someone_is_waiting = true;
+			waitee->pwaiter = thread_current ();
+			sema_down (&thread_current ()->pwait_sema);
+
+			ASSERT (exit_status != -99);
 		}
-		// printf ("Wait until waitee exit.\n");
-		waitee->someone_is_waiting = true;
-		waitee->pwaiter = curr;
-		sema_down (&curr->pwait_sema);
-		exit_status = seek_exit_log (child_tid);
-		ASSERT (exit_status != -2);
 	}
+	remove_exit_log (log);
+	exit_status = log->exit_status;
+	free (log);
+
 	intr_set_level (old_level);
 	return exit_status;
 }
@@ -369,12 +357,8 @@ process_exit (void) {
 	enum intr_level old_level;
 	old_level = intr_disable ();
 	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
-	add_exit_log (curr->tid, curr->exit_status);
+	set_exit_log ();
 	// printf ("%d try sema up.\n", curr->tid);
-	if (curr->parent != NULL) {
-		list_remove (&curr->elem_child);
-	}
-
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	file_close (curr->excutable);

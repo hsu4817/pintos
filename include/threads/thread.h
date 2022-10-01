@@ -106,8 +106,6 @@ struct thread {
 	struct list_elem elem_sleep;		/* List element for sleep */
 
 	/*used in process.c and syscall.c*/
-	struct list childs;					/* children processes*/
-	struct list_elem elem_child;
 	struct thread *parent;				/* Parent process. */
 	struct semaphore pwait_sema;		/* Semaphore for process wait. */
 	int exit_status;					/* Exit status of thread. default is 0. */
@@ -198,7 +196,9 @@ bool less_priority(const struct list_elem *a, const struct list_elem *b, void *a
 void do_iret (struct intr_frame *tf);
 
 struct thread *tid_to_thread (tid_t tid);
-int seek_exit_log (tid_t tid);
-void add_exit_log (tid_t tid, int status);
+struct exit_log_t * seek_exit_log (tid_t tid);
+void add_exit_log (struct exit_log_t *new_log);
+void set_exit_log (void);
+void remove_exit_log (struct exit_log_t *log);
 
 #endif /* threads/thread.h */
