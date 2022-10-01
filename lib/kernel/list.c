@@ -201,7 +201,7 @@ list_push_front (struct list *list, struct list_elem *elem) {
 void
 list_push_back (struct list *list, struct list_elem *elem) {
 	struct list_elem *i;
-	for (i = list_begin (list); i != list_end (list); i = list_next (i)) {
+	for (i = list_rbegin (list); i != list_rend (list); i = list_prev (i)) {
 		if (i == elem){
 			return;
 		}
