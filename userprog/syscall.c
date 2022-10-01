@@ -46,6 +46,8 @@ syscall_init (void) {
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
 
+	lock_init(&syslock);
+
 	/* The interrupt service rountine should not serve any interrupts
 	 * until the syscall_entry swaps the userland stack to the kernel
 	 * mode stack. Therefore, we masked the FLAG_FL. */
@@ -150,15 +152,27 @@ int wait (tid_t pid){
 bool create (const char *file, unsigned initial_size) {
 	if (file == NULL) exit (-1);
 	if (*file == '\0') return false;
+
+	lock_acquire(&syslock);
+	bool create_bool;
+
 	intr_enable ();
-	return filesys_create (file, initial_size);
+	create_bool = filesys_create (file, initial_size);
+	lock_release(&syslock);
+	return create_bool;
 }
 
 bool remove (const char *file) {
 	if (file == NULL) exit (-1);
 	if (*file == '\0') return false;
+
+	lock_acquire(&syslock);
+	bool remove_bool;
+
 	intr_enable ();
-	return filesys_remove (file);
+	remove_bool =  filesys_remove (file);
+	lock_release(&syslock);
+	return remove_bool;
 }
 
 
@@ -169,6 +183,8 @@ int open (const char *file) {
 
 	if (file == NULL) exit(-1);
 	if (*file == '\0') return -1;
+
+	lock_acquire(&syslock);
 
 	intr_enable ();
 	FD = filesys_open (file);
@@ -183,7 +199,7 @@ int open (const char *file) {
 	list_push_back (&curr->desc_table, &fd->elem);
 
 	intr_set_level (old_level);
-
+	lock_release(&syslock);
 	return fd->desc_no;
 }
 
