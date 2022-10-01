@@ -22,11 +22,9 @@
 #include "threads/synch.h"
 
 
-
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 struct file* get_file_with_fd (int fd);
-static struct lock syslock;
 
 
 /* System call.
@@ -47,8 +45,6 @@ syscall_init (void) {
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
 	write_msr(MSR_LSTAR, (uint64_t) syscall_entry);
-
-	lock_init(&syslock);
 
 	/* The interrupt service rountine should not serve any interrupts
 	 * until the syscall_entry swaps the userland stack to the kernel
@@ -118,7 +114,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 void halt (void){
 	power_off ();
-	printf("must not be called");
 }
 
 void exit (int status){
@@ -156,12 +151,12 @@ bool create (const char *file, unsigned initial_size) {
 	if (file == NULL) exit (-1);
 	if (*file == '\0') return false;
 
-	lock_acquire(&syslock);
+	file_lock_aquire ();
 	bool create_bool;
 
 	intr_enable ();
 	create_bool = filesys_create (file, initial_size);
-	lock_release(&syslock);
+	file_lock_release ();
 	return create_bool;
 }
 
@@ -169,12 +164,12 @@ bool remove (const char *file) {
 	if (file == NULL) exit (-1);
 	if (*file == '\0') return false;
 
-	lock_acquire(&syslock);
+	file_lock_aquire ();
 	bool remove_bool;
 
 	intr_enable ();
 	remove_bool =  filesys_remove (file);
-	lock_release(&syslock);
+	file_lock_release ();
 	return remove_bool;
 }
 
@@ -188,10 +183,11 @@ int open (const char *file) {
 	if (*file == '\0') return -1;
 	if (fd == NULL) return -1;
 
-	lock_acquire(&syslock);
+	file_lock_aquire ();
 
 	intr_enable ();
 	FD = filesys_open (file);
+	file_lock_release ();
 	if (FD == NULL) {
 		return -1;
 	}
@@ -200,7 +196,7 @@ int open (const char *file) {
 	fd->file = FD;
 	list_push_back (&curr->desc_table, &fd->elem);
 
-	lock_release(&syslock);
+	
 	return fd->desc_no;
 }
 
@@ -232,8 +228,11 @@ int read (int fd, void *buffer, unsigned size) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 
+	file_lock_aquire ();
 	intr_enable ();
-	return file_read (file, buffer, size);
+	int read_ = file_read (file, buffer, size);
+	file_lock_release ();
+	return read_;
 }
 
 int 
@@ -245,10 +244,10 @@ write (int fd, const void *buffer, unsigned length) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 	
-	lock_acquire (&syslock);
+	file_lock_aquire ();
 	intr_enable ();
 	int writted = (int) file_write (file, buffer, length);
-	lock_release (&syslock);
+	file_lock_release ();
 	return writted;
 }
 
@@ -256,18 +255,18 @@ void
 seek (int fd, unsigned position) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return;
-	lock_acquire (&syslock);
+	file_lock_aquire ();
 	file_seek (file, position);
-	lock_release (&syslock);
+	file_lock_release ();
 }
 
 unsigned tell (int fd) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 
-	lock_acquire (&syslock);
+	file_lock_aquire ();
 	unsigned pos = file_tell (file);
-	lock_release (&syslock);
+	file_lock_release ();
 	return pos;
 }
 
@@ -292,10 +291,10 @@ void close (int fd) {
 	else {
 		
 		list_remove (&fd_->elem);
-		lock_acquire (&syslock);
+		file_lock_aquire ();
 		intr_enable ();
 		file_close (fd_->file);
-		lock_release (&syslock);
+		file_lock_release ();
 		free (fd_);		
 	}
 }

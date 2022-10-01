@@ -52,6 +52,8 @@ static struct list sleeping_list;
 static struct list exit_log;
 static struct lock exit_lock;
 
+static struct lock file_lock;
+
 /* Statistics. */
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
@@ -135,6 +137,7 @@ thread_init (void) {
 	load_avg = 0;
 
 	lock_init (&exit_lock);
+	lock_init (&file_lock);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -181,12 +184,13 @@ thread_tick (void) {
 	/* Update left ticks to sleep for all threads in sleeping list. If it is equal or less then 0, wake up it. */
 	if (!list_empty(&sleeping_list)){
 		struct list_elem *i;
-		for (i = list_begin(&sleeping_list); i != list_end(&sleeping_list); i = list_next(i)){
-			list_entry(i, struct thread, elem_sleep)->sleep--;
-			if (list_entry(i, struct thread, elem_sleep)->sleep <= 0){
-				thread_unblock(list_entry(i, struct thread, elem_sleep));
-				list_remove(i);
-				i = list_prev(i);
+		for (i = list_begin(&sleeping_list); i != list_end(&sleeping_list);){
+			struct list_elem *temp = i;
+			i = list_next(i);
+			list_entry(temp, struct thread, elem_sleep)->sleep--;
+			if (list_entry(temp, struct thread, elem_sleep)->sleep <= 0){
+				thread_unblock(list_entry(temp, struct thread, elem_sleep));
+				list_remove(temp);
 				intr_yield_on_return ();
 			}
 		}
@@ -317,7 +321,10 @@ void
 thread_block (void) {
 	ASSERT (!intr_context ());
 	ASSERT (intr_get_level () == INTR_OFF);
-	list_push_back(&blocked_list, &thread_current()->elem_blocked);
+	ASSERT (thread_current ()->status == THREAD_RUNNING);
+	if (thread_current () != idle_thread){
+		list_push_back(&blocked_list, &thread_current()->elem_blocked);
+	}
 	thread_current ()->status = THREAD_BLOCKED;
 	schedule ();
 }
@@ -1004,4 +1011,15 @@ remove_exit_log (struct exit_log_t *log) {
 	lock_acquire (&exit_lock);
 	list_remove (&log->elem);
 	lock_release (&exit_lock);
+}
+
+void
+file_lock_aquire (void) {lock_acquire (&file_lock);}
+void
+file_lock_release (void) {lock_release (&file_lock);}
+void
+file_lock_exit (void) {
+	if (file_lock.holder == thread_current ()){
+		file_lock_release ();
+	}
 }

@@ -237,15 +237,18 @@ __do_fork (void *aux[]) {
 
 
 	//parent child 관계형성
+	file_lock_aquire ();
 	current->parent = parent;
 	current->excutable = file_duplicate (parent->excutable);
 	file_deny_write (current->excutable);
+	file_lock_release ();
 
 	if (!process_init ()){
 		goto error;
 	}
 
 	/* Duplicate file descriptor. */
+	
 	struct list_elem *i;
 	for (i = list_begin (&parent->desc_table); i != list_end (&parent->desc_table); i = list_next (i)) {
 		struct fdesc *fd = list_entry (i, struct fdesc, elem);
@@ -255,13 +258,16 @@ __do_fork (void *aux[]) {
 			goto error;
 		}
 		dup_fd->desc_no = fd->desc_no;
+		file_lock_aquire ();
 		dup_fd->file = file_duplicate (fd->file);
+		file_lock_release ();
 		if (dup_fd->file == NULL) {
 			free(dup_fd);
 			goto error;
 		}
 		list_push_back (&current->desc_table, &dup_fd->elem);
 	}
+	
 	intr_set_level (old_level);
 
 	/* Finally, switch to the newly created process. */
@@ -272,6 +278,7 @@ __do_fork (void *aux[]) {
 	}
 	
 error:
+	
 	current->exit_status = -1;
 	sema_up(&parent->fork_sema);
 	thread_exit ();
@@ -361,11 +368,13 @@ process_exit (void) {
 	 * TODO: We recommend you to implement process resource cleanup here. */
 	enum intr_level old_level;
 	old_level = intr_disable ();
+	file_lock_exit ();
 	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	set_exit_log ();
 	// printf ("%d try sema up.\n", curr->tid);
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
+	file_lock_aquire ();
 	file_close (curr->excutable);
 
 	struct list_elem *i;
@@ -380,6 +389,8 @@ process_exit (void) {
 		list_remove (temp);
 		free (list_entry (temp, struct fdesc, elem));
 	}
+	file_lock_release ();
+
 	if (curr->someone_is_waiting) {
 		curr->someone_is_waiting = false;
 		sema_up (&curr->pwaiter->pwait_sema);
@@ -520,12 +531,15 @@ load (const char *file_name, struct intr_frame *if_) {
 	if (new_file_name == NULL) {goto done;}
 	strlcpy (new_file_name, front, file_name_length+1);
 
+	file_lock_aquire ();
+
 	if (command_length > 4096)
 	{
 		printf ("Command is too long\n");
 		goto done;
 	}
 
+	
 	intr_set_level (old_level);
 
 	/* Allocate and activate page directory. */
@@ -661,6 +675,7 @@ done:
 	/* We arrive here whether the load is successful or not. */
 	if (argv != NULL) {palloc_free_page (argv);}
 	if (new_file_name != NULL) {palloc_free_page (new_file_name);}
+	file_lock_release ();
 
 	return success;
 }

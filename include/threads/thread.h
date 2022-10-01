@@ -201,4 +201,8 @@ void add_exit_log (struct exit_log_t *new_log);
 void set_exit_log (void);
 void remove_exit_log (struct exit_log_t *log);
 
+void file_lock_aquire (void);
+void file_lock_release (void);
+void file_lock_exit (voie);
+
 #endif /* threads/thread.h */
