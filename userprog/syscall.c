@@ -296,8 +296,7 @@ void close (int fd) {
 		intr_enable ();
 		file_close (fd_->file);
 		lock_release (&syslock);
-		free (fd);
-		
+		free (fd_);		
 	}
 }
 

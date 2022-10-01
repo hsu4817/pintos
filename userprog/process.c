@@ -122,9 +122,6 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
-	void *memory_check = palloc_get_page (0);
-	if (memory_check == NULL) return TID_ERROR;
-	else palloc_free_page(memory_check);
 	
 	void *argv[2];
 	argv[0] = thread_current ();
@@ -182,7 +179,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
-		free(newpage);
+		palloc_free_page (newpage);
 		return false;
 	}
 	return true;
