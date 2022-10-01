@@ -33,6 +33,9 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 
+#define THREAD_MAGIC 0xcd6abf4b
+#define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
+
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -214,6 +217,13 @@ lock_acquire (struct lock *lock) {
 	enum intr_level old_level = intr_disable ();
 	
 	if (lock->holder != NULL) {
+		// ASSERT (is_thread (lock->holder));
+		if (!is_thread (lock->holder)) {
+			lock_init (lock);
+			lock->holder = thread_current ();
+			return;
+		}
+
 		thread_current()->waiting = lock;
 		lock->donated++;
 		if (thread_get_modified_priority(lock->holder) < thread_get_modified_priority(thread_current())){
@@ -260,7 +270,6 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
-	
 	enum intr_level old_level = intr_disable ();
 
 	struct thread *curr = thread_current();

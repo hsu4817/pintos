@@ -81,6 +81,7 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+
 	thread_name = palloc_get_page (0);
 	if (thread_name == NULL) return TID_ERROR;
 	strlcpy (thread_name, file_name , PGSIZE);
@@ -121,6 +122,10 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
+	void *memory_check = palloc_get_page (0);
+	if (memory_check == NULL) return TID_ERROR;
+	else palloc_free_page(memory_check);
+	
 	void *argv[2];
 	argv[0] = thread_current ();
 	argv[1] = if_;
@@ -236,6 +241,8 @@ __do_fork (void *aux[]) {
 
 	//parent child 관계형성
 	current->parent = parent;
+	current->excutable = file_duplicate (parent->excutable);
+	file_deny_write (current->excutable);
 
 	if (!process_init ()){
 		goto error;
@@ -253,6 +260,7 @@ __do_fork (void *aux[]) {
 		dup_fd->desc_no = fd->desc_no;
 		dup_fd->file = file_duplicate (fd->file);
 		if (dup_fd->file == NULL) {
+			free(dup_fd);
 			goto error;
 		}
 		list_push_back (&current->desc_table, &dup_fd->elem);

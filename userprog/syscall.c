@@ -19,12 +19,14 @@
 #include "userprog/process.h"
 #include "lib/string.h"
 #include "devices/input.h"
+#include "threads/synch.h"
 
 
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 struct file* get_file_with_fd (int fd);
+static struct lock syslock;
 
 
 /* System call.
@@ -193,14 +195,11 @@ int open (const char *file) {
 	if (FD == NULL) {
 		return -1;
 	}
-	enum intr_level old_level;
-	old_level = intr_disable ();
 
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
 	fd->file = FD;
 	list_push_back (&curr->desc_table, &fd->elem);
 
-	intr_set_level (old_level);
 	lock_release(&syslock);
 	return fd->desc_no;
 }
@@ -219,7 +218,6 @@ get_file_with_fd (int fd){
 	}
 	return NULL;
 }
-
 
 int filesize (int fd) {
 	intr_enable ();
@@ -247,27 +245,30 @@ write (int fd, const void *buffer, unsigned length) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 	
+	lock_acquire (&syslock);
 	intr_enable ();
-	return (int) file_write (file, buffer, length);
+	int writted = (int) file_write (file, buffer, length);
+	lock_release (&syslock);
+	return writted;
 }
 
 void
 seek (int fd, unsigned position) {
-	intr_enable ();
-
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return;
-	
+	lock_acquire (&syslock);
 	file_seek (file, position);
+	lock_release (&syslock);
 }
 
 unsigned tell (int fd) {
-	intr_enable ();
-
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 
-	return file_tell (file);
+	lock_acquire (&syslock);
+	unsigned pos = file_tell (file);
+	lock_release (&syslock);
+	return pos;
 }
 
 void close (int fd) {
@@ -278,6 +279,7 @@ void close (int fd) {
 	struct fdesc *fd_ = NULL;
 	struct thread *curr = thread_current ();
 	struct list_elem *i;
+
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
 		if (list_entry (i, struct fdesc, elem)->desc_no == fd) {
 			fd_ = list_entry (i, struct fdesc, elem);
@@ -288,9 +290,14 @@ void close (int fd) {
 		return;
 	}
 	else {
+		
 		list_remove (&fd_->elem);
+		lock_acquire (&syslock);
 		intr_enable ();
 		file_close (fd_->file);
+		lock_release (&syslock);
+		free (fd);
+		
 	}
 }
 
