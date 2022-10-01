@@ -180,8 +180,6 @@ thread_tick (void) {
 
 	/* Update left ticks to sleep for all threads in sleeping list. If it is equal or less then 0, wake up it. */
 	if (!list_empty(&sleeping_list)){
-		enum intr_level old_level;
-		old_level = intr_disable();
 		struct list_elem *i;
 		for (i = list_begin(&sleeping_list); i != list_end(&sleeping_list); i = list_next(i)){
 			list_entry(i, struct thread, elem_sleep)->sleep--;
@@ -192,8 +190,6 @@ thread_tick (void) {
 				intr_yield_on_return ();
 			}
 		}
-
-		intr_set_level(old_level);
 	}
 	
 	//mlfqs load_avg, recent_avg recount
