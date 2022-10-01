@@ -15,11 +15,14 @@
 #include "filesys/filesys.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"
-#include "lib/kernel/stdio.h"
 #include "userprog/process.h"
 #include "lib/string.h"
 #include "devices/input.h"
 #include "threads/synch.h"
+#include "lib/kernel/stdio.h"
+#include "devices/timer.h"
+
+
 
 
 void syscall_entry (void);
@@ -113,6 +116,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 
 void halt (void){
+	intr_enable ();
+	timer_sleep(10);
 	power_off ();
 }
 
@@ -238,16 +243,18 @@ int read (int fd, void *buffer, unsigned size) {
 int 
 write (int fd, const void *buffer, unsigned length) {
 	if (fd == 1) {
+		file_lock_aquire ();
 		putbuf (buffer, length);
+		file_lock_release ();
 		return length;
 	}
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
 	
-	file_lock_aquire ();
+	
 	intr_enable ();
 	int writted = (int) file_write (file, buffer, length);
-	file_lock_release ();
+	
 	return writted;
 }
 

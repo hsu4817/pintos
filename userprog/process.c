@@ -108,10 +108,9 @@ initd (void *f_name) {
 #endif
 
 	if (!process_init ()){
-		PANIC ("Faile to launch initd\n");
+		PANIC ("Fail to launch initd\n");
 	}
 	
-
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED ();

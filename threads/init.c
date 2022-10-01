@@ -349,10 +349,20 @@ power_off (void) {
 	for (;;);
 }
 
+void
+power_off_without_print (void) {
+#ifdef FILESYS
+	filesys_done ();
+#endif
+	outw (0x604, 0x2000);               /* Poweroff command for qemu */
+	for (;;);
+}
+
 /* Print statistics about Pintos execution. */
 static void
 print_stats (void) {
 	timer_print_stats ();
+	
 	thread_print_stats ();
 #ifdef FILESYS
 	disk_print_stats ();

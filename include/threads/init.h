@@ -16,5 +16,6 @@ extern uint64_t *base_pml4;
 extern bool power_off_when_done;
 
 void power_off (void) NO_RETURN;
+void power_off_without_print (void);
 
 #endif /* threads/init.h */
