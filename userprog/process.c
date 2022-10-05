@@ -34,27 +34,9 @@ static void __do_fork (void *aux[]);
 static bool
 process_init (void) {
 	struct thread *current = thread_current ();
-
 	enum intr_level old_level = intr_disable ();
-	/* Init stdio and stdout file descriptor. */
-	if (list_empty (&current->desc_table)){
-		struct fdesc *stdinput = malloc (sizeof(struct fdesc));
-		struct fdesc *stdoutput = malloc (sizeof(struct fdesc));
-
-		if (stdinput == NULL) return false;
-		if (stdoutput == NULL) return false;
-
-		stdinput->desc_no = 0;
-		stdinput->file = NULL;
-		stdoutput->desc_no = 1;
-		stdoutput->file = NULL;
-		
-		list_push_back (&current->desc_table, &stdinput->elem);
-		list_push_back (&current->desc_table, &stdoutput->elem);
-	}
 
 	/* Init exit log. */
-
 	struct exit_log_t *exit_log = malloc (sizeof (struct exit_log_t));
 	if (exit_log == NULL) {return false;}
 	add_exit_log (exit_log);
@@ -111,6 +93,22 @@ initd (void *f_name) {
 		PANIC ("Fail to launch initd\n");
 	}
 	
+	/* Init stdio and stdout file descriptor. */
+
+	struct fdesc *stdinput = malloc (sizeof(struct fdesc));
+	struct fdesc *stdoutput = malloc (sizeof(struct fdesc));
+
+	if (stdinput == NULL) return false;
+	if (stdoutput == NULL) return false;
+
+	stdinput->desc_no = 0;
+	stdinput->file = 1;
+	stdoutput->desc_no = 1;
+	stdoutput->file = 2;
+	
+	list_push_back (&thread_current ()->desc_table, &stdinput->elem);
+	list_push_back (&thread_current ()->desc_table, &stdoutput->elem);
+
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED ();
@@ -251,19 +249,22 @@ __do_fork (void *aux[]) {
 	struct list_elem *i;
 	for (i = list_begin (&parent->desc_table); i != list_end (&parent->desc_table); i = list_next (i)) {
 		struct fdesc *fd = list_entry (i, struct fdesc, elem);
-		if (fd->desc_no == 0 || fd->desc_no == 1) continue;
 		struct fdesc *dup_fd = malloc (sizeof (struct fdesc));
 		if (dup_fd == NULL) {
 			goto error;
 		}
 		dup_fd->desc_no = fd->desc_no;
-		file_lock_aquire ();
-		dup_fd->file = file_duplicate (fd->file);
-		file_lock_release ();
-		if (dup_fd->file == NULL) {
-			free(dup_fd);
-			goto error;
+		if (fd->file > 2){
+			file_lock_aquire ();
+			dup_fd->file = file_duplicate (fd->file);
+			file_lock_release ();
+			if (dup_fd->file == NULL) {
+				free(dup_fd);
+				goto error;
+			}
 		}
+		else dup_fd->file = fd->file;
+		
 		list_push_back (&current->desc_table, &dup_fd->elem);
 	}
 	
@@ -382,7 +383,7 @@ process_exit (void) {
 		ASSERT (i != list_next (i));
 		i = list_next(i);
 		
-		if (list_entry (temp, struct fdesc, elem)->desc_no > 1){
+		if (list_entry (temp, struct fdesc, elem)->file > 2){
 			file_close (list_entry (temp, struct fdesc, elem)->file);
 		}
 		list_remove (temp);

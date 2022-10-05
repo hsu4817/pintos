@@ -21,13 +21,14 @@
 #include "threads/synch.h"
 #include "lib/kernel/stdio.h"
 #include "devices/timer.h"
-
+#include "filesys/inode.h"
 
 
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 struct file* get_file_with_fd (int fd);
+void update_dup (struct file*);
 
 
 /* System call.
@@ -106,6 +107,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_CLOSE:
 			close ((int) f->R.rdi);
+			break;
+		case SYS_DUP2:
+			f->R.rax = dup2 (f->R.rdi, f->R.rsi);
 			break;
 		default:
 			printf ("Unknown syscall number %d.\n", syscall_no);
@@ -200,16 +204,12 @@ int open (const char *file) {
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
 	fd->file = FD;
 	list_push_back (&curr->desc_table, &fd->elem);
-
 	
 	return fd->desc_no;
 }
 
 struct file*
 get_file_with_fd (int fd){
-	if (fd == 0 || fd == 1) {
-		return false;
-	}
 	struct thread *curr = thread_current ();
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
@@ -220,41 +220,50 @@ get_file_with_fd (int fd){
 	return NULL;
 }
 
+
 int filesize (int fd) {
 	intr_enable ();
 
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
+	if (file == 1 || file == 2) return;
 	return (int) file_length (file);
 }
 
 int read (int fd, void *buffer, unsigned size) {
-	if (fd == 0) return input_getc();
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
+	if (file == 1) return input_getc();
+	if (file == 2) return -1;
 
 	file_lock_aquire ();
 	intr_enable ();
 	int read_ = file_read (file, buffer, size);
+	update_dup (file);
+
 	file_lock_release ();
 	return read_;
 }
 
 int 
 write (int fd, const void *buffer, unsigned length) {
-	if (fd == 1) {
+	struct file* file = get_file_with_fd (fd);
+	if (file == NULL) return -1;
+	if(file == 1) return -1;
+	if (file == 2) {
 		file_lock_aquire ();
 		putbuf (buffer, length);
 		file_lock_release ();
-		return length;
+		return length;		
 	}
-	struct file* file = get_file_with_fd (fd);
-	if (file == NULL) return -1;
 	
-	
+	file_lock_aquire ();
+
 	intr_enable ();
 	int writted = (int) file_write (file, buffer, length);
-	
+	update_dup (file);
+
+	file_lock_release ();
 	return writted;
 }
 
@@ -262,14 +271,20 @@ void
 seek (int fd, unsigned position) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return;
+	if (file == 1 || file == 2) return;
+
 	file_lock_aquire ();
+	
 	file_seek (file, position);
+	update_dup (file);
+
 	file_lock_release ();
 }
 
 unsigned tell (int fd) {
 	struct file* file = get_file_with_fd (fd);
 	if (file == NULL) return -1;
+	if (file == 1 || file == 2) return -1;
 
 	file_lock_aquire ();
 	unsigned pos = file_tell (file);
@@ -278,10 +293,6 @@ unsigned tell (int fd) {
 }
 
 void close (int fd) {
-	
-	if (fd == 0 || fd == 1) {
-		return;
-	}
 	struct fdesc *fd_ = NULL;
 	struct thread *curr = thread_current ();
 	struct list_elem *i;
@@ -292,17 +303,94 @@ void close (int fd) {
 			break;
 		}
 	}
+
 	if (i == list_end (&curr->desc_table)) {
 		return;
 	}
 	else {
-		
 		list_remove (&fd_->elem);
 		file_lock_aquire ();
 		intr_enable ();
-		file_close (fd_->file);
+		if (fd_->file > 2) file_close (fd_->file);
 		file_lock_release ();
 		free (fd_);		
+	}
+}
+
+int dup2 (int oldfd, int newfd) {
+	struct list_elem *i;
+	struct thread *curr;
+	struct fdesc *oldfdesc = NULL;
+	struct fdesc *newfdesc = NULL;
+	struct list_elem *pivot;
+	struct file* temp;
+
+	curr = thread_current ();
+	pivot = list_begin (&curr->desc_table);
+
+	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
+		if (list_entry (i, struct fdesc, elem)->desc_no == oldfd) {
+			oldfdesc = list_entry (i, struct fdesc, elem);
+		}
+		if (list_entry (i, struct fdesc, elem)->desc_no == newfd) {
+			newfdesc = list_entry (i, struct fdesc, elem);
+			pivot = list_next (i);
+		}
+		else if (list_entry (pivot, struct fdesc, elem)->desc_no < newfd) {
+			pivot = list_next (i);
+		}
+	}
+	if (oldfdesc == NULL) return -1;
+	if (oldfdesc == newfdesc) return newfd;
+
+	if (oldfdesc->file > 2) temp = file_duplicate (oldfdesc->file);
+	else temp = oldfdesc->file;
+	if (temp == NULL) goto error;
+
+	file_lock_aquire ();
+	if (newfdesc == NULL) {
+		newfdesc = malloc (sizeof (struct fdesc));
+		if (newfdesc == NULL) goto error;
+
+		newfdesc->desc_no = newfd;
+		newfdesc->file = temp;
+
+		list_insert (pivot, &newfdesc->elem);
+	}
+	else {
+		if (temp == NULL) goto error;
+		if (newfdesc->file > 2) file_close (newfdesc->file);
+		newfdesc->file = temp;
+	}
+
+	file_lock_release ();
+	return newfdesc->desc_no;
+
+error:
+	file_close (temp);
+	file_lock_release ();
+	return -1;
+}
+
+void
+update_dup (struct file* file) {
+	struct list_elem *i;
+	struct thread *curr;
+	struct inode *inode;
+	struct file *fdfile;
+	int pos;
+
+	pos = file_tell (file);
+	curr = thread_current ();
+	inode = file_get_inode (file);
+	
+	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
+		fdfile = list_entry (i, struct fdesc, elem)->file;
+		if (fdfile > 2 && fdfile != file) {
+			if (file_get_inode (fdfile) == inode) {
+				file_seek (fdfile, pos);
+			}
+		}
 	}
 }
 
