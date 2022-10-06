@@ -929,7 +929,7 @@ tid_to_thread (tid_t tid) {
 	struct list_elem *i;
 	for (i = list_begin (&ready_list); i != list_end (&ready_list); i = list_next (i)){
 		cnt++;
-		ASSERT (cnt < 100);
+		ASSERT (cnt < 1000);
 		if (list_entry (i, struct thread, elem)->tid == tid) {
 			temp = list_entry (i, struct thread, elem);
 			break;
@@ -938,7 +938,7 @@ tid_to_thread (tid_t tid) {
 	if (i == list_end (&ready_list)) {
 		for (i = list_begin (&blocked_list); i != list_end (&blocked_list); i = list_next (i)){
 			cnt++;
-			ASSERT (cnt < 100);
+			ASSERT (cnt < 1000);
 			if (list_entry (i, struct thread, elem_blocked)->tid == tid) {
 				temp = list_entry (i, struct thread, elem_blocked);
 				break;
