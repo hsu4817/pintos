@@ -185,11 +185,13 @@ bool remove (const char *file) {
 
 int open (const char *file) {
 	struct file *FD;
-	struct fdesc *fd = malloc (sizeof(struct fdesc));
+	struct fdesc *fd;
 	struct thread *curr = thread_current ();
 
 	if (file == NULL) exit(-1);
 	if (*file == '\0') return -1;
+
+	fd = malloc (sizeof(struct fdesc));
 	if (fd == NULL) return -1;
 
 	file_lock_aquire ();
@@ -198,6 +200,7 @@ int open (const char *file) {
 	FD = filesys_open (file);
 	file_lock_release ();
 	if (FD == NULL) {
+		free (fd);
 		return -1;
 	}
 

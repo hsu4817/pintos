@@ -278,7 +278,6 @@ __do_fork (void *aux[]) {
 	}
 	
 error:
-	
 	current->exit_status = -1;
 	sema_up(&parent->fork_sema);
 	thread_exit ();
@@ -516,7 +515,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	old_level = intr_disable (); //Interrupt off.
 
 	size_t command_length = strlen (file_name);
-	argv = palloc_get_page (0);
+	argv = malloc (command_length+1);
 	if (argv == NULL) {goto done;}
 	strlcpy (argv, file_name, PGSIZE);
 
@@ -527,7 +526,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	while (*end != ' ' && *end != '\0') end++;
 	file_name_length = end - front;
 
-	new_file_name = palloc_get_page (0);
+	new_file_name = malloc (file_name_length+1);
 	if (new_file_name == NULL) {goto done;}
 	strlcpy (new_file_name, front, file_name_length+1);
 
@@ -673,8 +672,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	intr_set_level (oold_level); //Interrupt on.
 done:
 	/* We arrive here whether the load is successful or not. */
-	if (argv != NULL) {palloc_free_page (argv);}
-	if (new_file_name != NULL) {palloc_free_page (new_file_name);}
+	if (argv != NULL) {free (argv);}
+	if (new_file_name != NULL) {free (new_file_name);}
 	file_lock_release ();
 
 	return success;
