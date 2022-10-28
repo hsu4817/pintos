@@ -1,3 +1,5 @@
 .vscode
 threads/build
 userprog/build
+vm/build
+team40.tar.gz

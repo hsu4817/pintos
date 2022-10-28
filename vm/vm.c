@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "threads/mmu.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -55,6 +56,19 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: should modify the field after calling the uninit_new. */
 
 		/* TODO: Insert the page into the spt. */
+		
+		struct page *new_page = malloc(sizeof(struct page));
+
+		switch VM_TYPE(type) {
+			case VM_ANON:
+				uninit_new (new_page, upage, init, type, aux, anon_initializer);
+				break;
+			case VM_FILE:
+				uninit_new (new_page, upage, init, type, aux, file_backed_initializer);
+				break;
+		}
+		
+		spt_insert_page (spt, new_page);
 	}
 err:
 	return false;
@@ -65,6 +79,13 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
+	struct list_elem *i;
+	for (i = list_begin (&spt->spt_table); i != list_end(&spt->spt_table); i = list_next(i)) {
+		if (va == list_entry (i, struct spt_unit, elem_spt)->page->va) {
+			page = list_entry (i, struct spt_unit, elem_spt)->page;
+			break;
+		}
+	}
 
 	return page;
 }
@@ -75,6 +96,28 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
+	struct spt_unit *unit;
+
+	struct list_elem *i;
+	for (i = list_begin (&spt->spt_table); i != list_end (&spt->spt_table); i = list_next(i)) {
+		if (page->va == list_entry (i, struct spt_unit, elem_spt)->page->va) {
+			break;
+		}
+	}
+	if (i == list_end (&spt->spt_table)) {
+		return false;
+	}
+
+	unit = malloc (sizeof(struct spt_unit));
+	if (unit != NULL) {
+		succ = true;
+	}
+	else {
+		return false;
+	}
+	unit->page = page;
+	page->unit = unit;
+	list_push_front (&spt->spt_table, &unit->elem_spt);
 
 	return succ;
 }
@@ -113,8 +156,15 @@ vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 
+	frame = malloc(sizeof(struct frame));
+	list_init(&frame->pages);
+	frame->kva = palloc_get_page (PAL_USER);
+	if (frame->kva == NULL) {
+		PANIC ("todo");
+	}
+
 	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
+	ASSERT (list_empty (&frame->pages));
 	return frame;
 }
 
@@ -153,6 +203,9 @@ bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
+	page = malloc (sizeof(struct page));
+	if (page == NULL) return false;
+	page->va = va;
 
 	return vm_do_claim_page (page);
 }
@@ -163,10 +216,13 @@ vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
-	frame->page = page;
+	list_push_back (&frame->pages, &page->elem_frame);
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	if (!spt_insert_page (spt, page)) return false;
+	pml4_set_page (thread_current ()->pml4, page->va, frame->kva, true);
 
 	return swap_in (page, frame->kva);
 }
@@ -174,6 +230,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	list_init(&spt->spt_table);
 }
 
 /* Copy supplemental page table from src to dst */

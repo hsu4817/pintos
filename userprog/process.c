@@ -833,6 +833,18 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	long long int *aux_ = aux;
+	struct file *file = aux_[0];
+	off_t ofs = aux_[1];
+	uint32_t page_read_bytes = aux_[2];
+	uint32_t page_zero_bytes = aux_[3];
+
+	off_t old_pos = file_tell (file);
+	file_seek (file, ofs + aux_[4]*PGSIZE);
+	if (file_read (file, page->frame->kva, page_read_bytes) != page_read_bytes) return false;
+	memset (page->frame->kva, 0, page_zero_bytes);
+
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -856,6 +868,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
 
+	int prev_pagecnt = 0;
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
@@ -864,7 +877,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		
+		long long int *aux = (long long int*) malloc (sizeof(long long int) * 5);
+		aux[0] = file;
+		aux[1] = (long long int) ofs;
+		aux[2] = (long long int) page_read_bytes;
+		aux[3] = (long long int) page_zero_bytes;
+		aux[4] = (long long int) prev_pagecnt;
+
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 			return false;
@@ -873,6 +893,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		prev_pagecnt++;
 	}
 	return true;
 }
@@ -887,7 +908,20 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-
+	uint8_t *kpage;
+	bool success = false;
+	
+		
+	kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+	if (kpage != NULL) {
+		struct thread *t = thread_current ();
+		success = (pml4_get_page (t->pml4, stack_bottom) == NULL && pml4_set_page (t->pml4, stack_bottom, kpage, true));
+		if (success) if_->rsp = USER_STACK;
+		else {
+			palloc_free_page (kpage);
+		}
+	}
 	return success;
+	
 }
 #endif /* VM */

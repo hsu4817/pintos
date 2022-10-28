@@ -24,6 +24,7 @@ enum vm_type {
 	VM_MARKER_END = (1 << 31),
 };
 
+#include <list.h>
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
@@ -46,6 +47,8 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	struct spt_unit *unit;
+	struct list_elem elem_frame;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -62,7 +65,7 @@ struct page {
 /* The representation of "frame" */
 struct frame {
 	void *kva;
-	struct page *page;
+	struct list pages;
 };
 
 /* The function table for page operations.
@@ -85,7 +88,18 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+	// (seulke) don't know what should be included.
+	struct list spt_table;
 };
+
+/* Unit of page metadata should be included in spt table. */
+struct spt_unit {
+	/* (seulke) TODO: put some arguments needed. */
+	struct page *page;
+
+	struct list_elem elem_spt;
+};
+
 
 #include "threads/thread.h"
 void supplemental_page_table_init (struct supplemental_page_table *spt);
