@@ -35,7 +35,7 @@ page_get_type (struct page *page) {
 
 /* Helpers */
 static struct frame *vm_get_victim (void);
-static bool vm_do_claim_page (struct page *page);
+static bool vm_do_claim_page (struct page *page, bool writable);
 static struct frame *vm_evict_frame (void);
 
 /* Create the pending page object with initializer. If you want to create a
@@ -116,6 +116,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		return false;
 	}
 	unit->page = page;
+	unit->is_stack = false;
 	page->unit = unit;
 	list_push_front (&spt->spt_table, &unit->elem_spt);
 
@@ -182,12 +183,19 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+	
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
-	return vm_do_claim_page (page);
+	page = spt_find_page(spt, pg_ofs (addr));
+	if (page == NULL) {
+		PANIC("TODO");
+	}
+	else {
+		return swap_in (page, page->frame->kva);
+	}
 }
 
 /* Free the page.
@@ -206,13 +214,16 @@ vm_claim_page (void *va UNUSED) {
 	page = malloc (sizeof(struct page));
 	if (page == NULL) return false;
 	page->va = va;
-
-	return vm_do_claim_page (page);
+	if (pml4_get_page(thread_current()->pml4, va) != NULL) {
+		free (page);
+		return false;
+	}
+	return vm_do_claim_page (page, true);
 }
 
 /* Claim the PAGE and set up the mmu. */
 static bool
-vm_do_claim_page (struct page *page) {
+vm_do_claim_page (struct page *page, bool writable) {
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
@@ -222,7 +233,7 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	if (!spt_insert_page (spt, page)) return false;
-	pml4_set_page (thread_current ()->pml4, page->va, frame->kva, true);
+	pml4_set_page (thread_current ()->pml4, page->va, frame->kva, writable);
 
 	return swap_in (page, frame->kva);
 }

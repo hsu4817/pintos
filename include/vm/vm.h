@@ -96,6 +96,7 @@ struct supplemental_page_table {
 struct spt_unit {
 	/* (seulke) TODO: put some arguments needed. */
 	struct page *page;
+	bool is_stack;
 
 	struct list_elem elem_spt;
 };

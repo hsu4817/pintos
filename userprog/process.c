@@ -908,20 +908,15 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	uint8_t *kpage;
-	bool success = false;
-	
-		
-	kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-	if (kpage != NULL) {
-		struct thread *t = thread_current ();
-		success = (pml4_get_page (t->pml4, stack_bottom) == NULL && pml4_set_page (t->pml4, stack_bottom, kpage, true));
-		if (success) if_->rsp = USER_STACK;
-		else {
-			palloc_free_page (kpage);
-		}
+	if (vm_claim_page (stack_bottom)){
+		struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
+		anon_initializer (page, VM_ANON, page->frame->kva);
+
+		if_->rsp = stack_bottom;		
+		page->unit->is_stack = true;
+		success = true;	
 	}
-	return success;
 	
+	return success;
 }
 #endif /* VM */
