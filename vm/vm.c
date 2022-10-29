@@ -198,7 +198,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	else {
 		printf("%x\n", addr);
-		return vm_do_claim_page(pg_round_down(addr), true);
+		return vm_do_claim_page(page, true);
 	}
 }
 
