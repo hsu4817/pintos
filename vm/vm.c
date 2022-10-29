@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
+#include "string.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -248,12 +249,46 @@ vm_do_claim_page (struct page *page, bool writable) {
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	list_init(&spt->spt_table);
+	spt->owner = thread_current();
 }
 
 /* Copy supplemental page table from src to dst */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	
+	struct list_elem *i;
+	for (i = list_begin (&src->spt_table); i != list_end (&src->spt_table); i = list_next (i)) {
+		struct spt_unit *c_unit = malloc(sizeof(struct spt_unit));
+		struct spt_unit *p_unit = list_entry (i, struct spt_unit, elem_spt);
+
+		c_unit->is_stack = p_unit->is_stack;
+		c_unit->uninited = p_unit->uninited;
+		c_unit->page = malloc (sizeof(struct page));
+		if (c_unit->page == NULL) {
+			free(c_unit);
+			return false;
+		}
+		memcpy (c_unit->page, p_unit->page, sizeof(*p_unit->page));
+		c_unit->page->unit = c_unit;
+
+		list_push_back(&p_unit->page->frame->pages, &c_unit->page->elem_frame);
+		
+		if (!pml4_set_page (thread_current ()->pml4, c_unit->page->va, c_unit->page->frame->kva, false)) {
+			free(c_unit->page);
+			free(c_unit);
+			return false;
+		}
+		pml4_clear_page (&src->owner->pml4, p_unit->page->va);
+		if (!pml4_set_page (&src->owner->pml4, p_unit->page->va, p_unit->page->frame->kva, false)) {
+			free(c_unit->page);
+			free(c_unit);
+			return false;
+		}
+
+		list_push_back(&dst->spt_table, &c_unit->elem_spt);
+	}
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -261,4 +296,11 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+
+	struct list_elem *i;
+	for (i = list_begin(&spt->spt_table); i != list_end(&spt->spt_table);){
+		destroy (list_entry(i, struct spt_unit, elem_spt)->page);
+		i = list_remove (i);
+		free (list_entry(i, struct spt_unit, elem_spt));
+	}
 }
