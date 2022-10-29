@@ -538,8 +538,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
-	printf ("Loading executable.\n");
-
 	intr_set_level (old_level);
 
 	/* Allocate and activate page directory. */
@@ -620,12 +618,10 @@ load (const char *file_name, struct intr_frame *if_) {
 		}
 	}
 
-	printf("trying setup stack.\n");
 	/* Set up stack. */
 	if (!setup_stack (if_)){
 		goto done;
 	}
-	printf("setup stack must be done.\n");
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
@@ -890,7 +886,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux)){
-			printf ("vm alloc failed.\n");
 			return false;
 		}
 
@@ -916,7 +911,6 @@ setup_stack (struct intr_frame *if_) {
 	if (vm_alloc_page (VM_ANON, stack_bottom, true)){
 		struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
 		if(!vm_claim_page(stack_bottom)){
-			printf("claim failed.\n");
 			return success;
 		} 
 		
