@@ -124,6 +124,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	unit->page = page;
 	unit->is_stack = false;
 	unit->uninited = false;
+	unit->flag_cow = false;
 	page->unit = unit;
 	list_push_front (&spt->spt_table, &unit->elem_spt);
 
@@ -183,7 +184,25 @@ vm_stack_growth (void *addr UNUSED) {
 
 /* Handle the fault on write_protected page */
 static bool
-vm_handle_wp (struct page *page UNUSED) {
+vm_handle_wp (struct page *page UNUSED, struct thread *cur) {
+	/*
+	if (page->unit->flag_cow) {
+		if (list_size(&page->frame->pages)>1){
+			struct frame *old_frame = page->frame;
+			list_remove (&page->elem_frame);
+			vm_do_claim_page (page, true);
+			memcpy(page->frame->kva, old_frame->kva, PGSIZE);
+			page->unit->flag_cow = false;
+		}
+		else {
+			uint64_t *cur_pte = pml4e_walk (cur->pml4, page->va, false);
+			*cur_pte = *cur_pte | PTE_W;
+			page->unit->flag_cow = false;
+		}
+
+	}
+	else return false;
+	*/
 }
 
 /* Return true on success */
@@ -202,11 +221,11 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	else {
 		if (page->unit->is_stack || page->unit->uninited){
+			// page->unit->uninited = false;
 			return vm_do_claim_page(page, true);
 		}
-		else {
-			return false;
-		}
+		else return false;
+
 	}
 }
 
@@ -264,6 +283,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 
 		c_unit->is_stack = p_unit->is_stack;
 		c_unit->uninited = p_unit->uninited;
+		// c_unit->flag_cow = p_unit->flag_cow;
 		c_unit->page = malloc (sizeof(struct page));
 		if (c_unit->page == NULL) {
 			free(c_unit);
@@ -279,14 +299,16 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			free(c_unit);
 			return false;
 		}
-		pml4_clear_page (&src->owner->pml4, p_unit->page->va);
-		if (!pml4_set_page (&src->owner->pml4, p_unit->page->va, p_unit->page->frame->kva, false)) {
-			free(c_unit->page);
-			free(c_unit);
-			return false;
+		/*
+		uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
+		if (*p_pte & PTE_W) {
+			*p_pte = *p_pte | ~PTE_W;
+			p_unit->flag_cow = true;
+			c_unit->flag_cow = true;
 		}
-
+		*/
 		list_push_back(&dst->spt_table, &c_unit->elem_spt);
+		
 	}
 	return true;
 }
@@ -299,7 +321,6 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 
 	struct list_elem *i;
 	for (i = list_begin(&spt->spt_table); i != list_end(&spt->spt_table);){
-		destroy (list_entry(i, struct spt_unit, elem_spt)->page);
 		i = list_remove (i);
 		free (list_entry(i, struct spt_unit, elem_spt));
 	}
