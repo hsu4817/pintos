@@ -90,6 +90,7 @@ struct page_operations {
 struct supplemental_page_table {
 	// (seulke) don't know what should be included.
 	struct list spt_table;
+	struct thread *owner;
 };
 
 /* Unit of page metadata should be included in spt table. */
