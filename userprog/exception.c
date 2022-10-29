@@ -144,14 +144,14 @@ page_fault (struct intr_frame *f) {
 	/* For project 3 and later. */
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
+	else {
+		thread_current ()->exit_status = -1;
+		thread_exit ();
+	}
 #endif
 
 	/* Count page faults. */
 	page_fault_cnt++;
-
-	/* May be editted later on project 3 */
-	thread_current ()->exit_status = -1;
-	thread_exit ();
 
 	/* If the fault is true fault, show info and exit. */
 	printf ("Page fault at %p: %s error %s page in %s context.\n",

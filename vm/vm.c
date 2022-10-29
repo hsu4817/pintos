@@ -69,7 +69,11 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 				break;
 		}
 		
-		return spt_insert_page (spt, new_page);
+		if (spt_insert_page (spt, new_page)){
+			new_page->unit->uninited = true;
+			// printf("added %x to pending pg.\n", new_page->va);
+			return true;
+		}
 	}
 err:
 	return false;
@@ -118,6 +122,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	}
 	unit->page = page;
 	unit->is_stack = false;
+	unit->uninited = false;
 	page->unit = unit;
 	list_push_front (&spt->spt_table, &unit->elem_spt);
 
@@ -195,7 +200,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		PANIC("TODO");
 	}
 	else {
-		return vm_do_claim_page(page, true);
+		if (page->unit->is_stack || page->unit->uninited){
+			return vm_do_claim_page(page, true);
+		}
+		else {
+			return false;
+		}
 	}
 }
 
@@ -229,6 +239,7 @@ vm_do_claim_page (struct page *page, bool writable) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	pml4_set_page (thread_current ()->pml4, page->va, frame->kva, writable);
+	// printf ("mapped %x.\n", page->va);
 
 	return swap_in (page, frame->kva);
 }

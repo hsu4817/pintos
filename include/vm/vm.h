@@ -97,6 +97,7 @@ struct spt_unit {
 	/* (seulke) TODO: put some arguments needed. */
 	struct page *page;
 	bool is_stack;
+	bool uninited;
 
 	struct list_elem elem_spt;
 };
