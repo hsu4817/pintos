@@ -106,6 +106,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		}
 	}
 	if (i != list_end (&spt->spt_table)) {
+		printf("already in spt.\n");
 		return false;
 	}
 
@@ -114,6 +115,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		succ = true;
 	}
 	else {
+		printf("malloc failed.\n");
 		return false;
 	}
 	unit->page = page;
@@ -190,12 +192,13 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
-	page = spt_find_page(spt, pg_ofs (addr));
+	page = spt_find_page(spt, pg_round_down(addr));
 	if (page == NULL) {
 		PANIC("TODO");
 	}
 	else {
-		return swap_in (page, page->frame->kva);
+		printf("%x\n", addr);
+		return vm_do_claim_page(pg_round_down(addr), true);
 	}
 }
 
@@ -214,6 +217,7 @@ vm_claim_page (void *va UNUSED) {
 	/* TODO: Fill this function */
 	page = spt_find_page(&thread_current()->spt, va);
 	if (page == NULL) return false;
+	printf("check.\n");
 	return vm_do_claim_page (page, true);
 }
 
@@ -228,8 +232,9 @@ vm_do_claim_page (struct page *page, bool writable) {
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *spt = &thread_current ()->spt;
-	if (!spt_insert_page (spt, page)) return false;
+	printf("check1\n");
 	pml4_set_page (thread_current ()->pml4, page->va, frame->kva, writable);
+	printf("setting mmu successed.\n");
 
 	return swap_in (page, frame->kva);
 }

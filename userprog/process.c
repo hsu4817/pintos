@@ -672,7 +672,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	*(char **)p = NULL;
 	
 	success = true;
-
 	intr_set_level (oold_level); //Interrupt on.
 done:
 	/* We arrive here whether the load is successful or not. */
@@ -916,7 +915,11 @@ setup_stack (struct intr_frame *if_) {
 	/* TODO: Your code goes here */
 	if (vm_alloc_page (VM_ANON, stack_bottom, true)){
 		struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
-		if(!vm_claim_page(stack_bottom)) return success;
+		if(!vm_claim_page(stack_bottom)){
+			printf("claim failed.\n");
+			return success;
+		} 
+		
 		page->unit->is_stack = true;
 		if_->rsp = USER_STACK;
 		success = true;
