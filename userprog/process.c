@@ -110,7 +110,7 @@ initd (void *f_name) {
 	list_push_back (&thread_current ()->desc_table, &stdoutput->elem);
 
 	if (process_exec (f_name) < 0)
-		PANIC("Fail to launch initd\n");
+		PANIC("Fail to launch initd while exec.\n");
 	NOT_REACHED ();
 }
 
@@ -538,7 +538,8 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
-	
+	printf ("Loading executable.\n");
+
 	intr_set_level (old_level);
 
 	/* Allocate and activate page directory. */
@@ -619,9 +620,12 @@ load (const char *file_name, struct intr_frame *if_) {
 		}
 	}
 
+	printf("trying setup stack.\n");
 	/* Set up stack. */
-	if (!setup_stack (if_))
+	if (!setup_stack (if_)){
 		goto done;
+	}
+	printf("setup stack must be done.\n");
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
@@ -879,15 +883,17 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		
 		long long int *aux = (long long int*) malloc (sizeof(long long int) * 5);
-		aux[0] = file;
+		aux[0] = (long long int) file;
 		aux[1] = (long long int) ofs;
 		aux[2] = (long long int) page_read_bytes;
 		aux[3] = (long long int) page_zero_bytes;
 		aux[4] = (long long int) prev_pagecnt;
 
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+					writable, lazy_load_segment, aux)){
+			printf ("vm alloc failed.\n");
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
@@ -908,13 +914,14 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	if (vm_claim_page (stack_bottom)){
+	if (vm_alloc_page (VM_ANON, stack_bottom, true)){
+		printf("allocation success.\n");
 		struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
-		anon_initializer (page, VM_ANON, page->frame->kva);
-
-		if_->rsp = stack_bottom;		
+		ASSERT (page != NULL);
+		printf("page is in spt.\n");
 		page->unit->is_stack = true;
-		success = true;	
+		if_->rsp = stack_bottom;
+		success = true;
 	}
 	
 	return success;

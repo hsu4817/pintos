@@ -58,6 +58,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: Insert the page into the spt. */
 		
 		struct page *new_page = malloc(sizeof(struct page));
+		if (new_page == NULL) goto err;
 
 		switch VM_TYPE(type) {
 			case VM_ANON:
@@ -68,7 +69,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 				break;
 		}
 		
-		spt_insert_page (spt, new_page);
+		return spt_insert_page (spt, new_page);
 	}
 err:
 	return false;
@@ -104,7 +105,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 			break;
 		}
 	}
-	if (i == list_end (&spt->spt_table)) {
+	if (i != list_end (&spt->spt_table)) {
 		return false;
 	}
 
