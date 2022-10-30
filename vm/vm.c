@@ -5,6 +5,9 @@
 #include "vm/inspect.h"
 #include "threads/mmu.h"
 #include "string.h"
+#include "threads/synch.h"
+
+static struct lock handler_lock;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -18,6 +21,7 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	lock_init(&handler_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -196,15 +200,27 @@ vm_stack_growth (void *addr UNUSED) {
 static bool
 vm_handle_wp (struct page *page UNUSED, struct thread *cur) {
 	if (page->unit->writable) {
+		printf("%s is trying cow at %x.\n", cur->name, page->va);
 		if (list_size(&page->cow_layer->pages)>1){
 			struct frame *old_frame = page->frame;
+			struct cow_layer_t *new_cow = malloc(sizeof(struct cow_layer_t));
+			list_init(&new_cow->pages);
+			list_remove(&page->elem_cow);
+
+			list_push_back(&new_cow->pages, &page->elem_cow);
+			page->cow_layer = new_cow;
+			page->cow_layer->frame = vm_get_frame ();
+			page->frame = page->cow_layer->frame;
+			
 			pml4_clear_page (cur->pml4, page->va);
-			vm_do_claim_page (page, true);
+			pml4_set_page (cur->pml4, page->va, page->frame->kva, true);
+
 			memcpy(page->frame->kva, old_frame->kva, PGSIZE);
 			return true;
 		}
 		else {
 			uint64_t *cur_pte = pml4e_walk (cur->pml4, page->va, false);
+			ASSERT (cur_pte != NULL);
 			*cur_pte = *cur_pte | PTE_W;
 			return true;
 		}
@@ -221,38 +237,44 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	bool success = false;
+	lock_acquire(&handler_lock);
 
+	page = spt_find_page(spt, pg_round_down(addr));
 	if (is_kernel_vaddr(addr)) {
 		// PANIC("kerneladdr.\n");
-		return false;
+		success = false;
 	}
-	page = spt_find_page(spt, pg_round_down(addr));
-	if (page == NULL) {
+	else if (page == NULL) {
 		void *rsp = user ? f->rsp : thread_current()->rsp_stack_growth;
 		if (rsp != addr + 8) return false;
 		if ((USER_STACK > addr) && (addr > USER_STACK - 0xfffff)) {
+			printf("stack growth.\n");
 			vm_stack_growth (addr);
-			return true;
+			success = true;
 		}
 		else {
 			// PANIC("faild to handle no_spt case.\n");
-			return false;
+			success = false;
 		}
 	}
 	else {
 		if (page->unit->uninited && not_present){
 			page->unit->uninited = false;
-			return vm_do_claim_page(page, page->unit->writable);
+			success = vm_do_claim_page(page, page->unit->writable);
 		}
 		else if (!not_present) {
 			ASSERT (page->unit->uninited == false);
-			return vm_handle_wp (page, thread_current ());
+			success = vm_handle_wp (page, thread_current ());
 		}
 		else {
 			// PANIC("faild to handle spt_exist case.\n");
-			return false;
+			success = false;
 		}
 	}
+
+	lock_release (&handler_lock);
+	return success;
 }
 
 /* Free the page.
@@ -278,37 +300,11 @@ static bool
 vm_do_claim_page (struct page *page, bool writable) {
 	struct frame *frame = NULL;
 	/* Set links */
-	if (writable) {
-		frame = vm_get_frame ();
-		if (list_size(&page->cow_layer->pages) > 1){
-			struct cow_layer_t *new_cow = malloc(sizeof(struct cow_layer_t));
-			list_remove(&page->elem_cow);
+	frame = vm_get_frame ();
 
-			list_init(&new_cow->pages);
-			list_push_back(&new_cow->pages, &page->elem_cow);
-			new_cow->frame = frame;
-			page->cow_layer = new_cow;
-			frame->cow_layer = new_cow;
-			page->frame = frame;
-		}
-		else {
-			page->cow_layer->frame = frame;
-			page->frame = frame;
-			frame->cow_layer = page->cow_layer;
-		} 
-	}
-	else {
-		if (page->cow_layer->frame == NULL) {
-			frame = vm_get_frame ();
-			page->cow_layer->frame = frame;
-			frame->cow_layer = page->cow_layer;
-			page->frame = frame;
-		}
-		else {
-			page->frame = page->cow_layer->frame;
-			frame = page->frame;
-		}
-	}
+	page->cow_layer->frame = frame;
+	frame->cow_layer = page->cow_layer;
+	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *spt = &thread_current ()->spt;
@@ -332,6 +328,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	
 	struct list_elem *i;
 	for (i = list_begin (&src->spt_table); i != list_end (&src->spt_table); i = list_next (i)) {
+		/*
 		struct spt_unit *c_unit = malloc(sizeof(struct spt_unit));
 		struct spt_unit *p_unit = list_entry (i, struct spt_unit, elem_spt);
 
@@ -349,20 +346,39 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		list_push_back(&p_unit->page->cow_layer->pages, &c_unit->page->elem_cow);
 		
 		if (p_unit->uninited == false) {
+			ASSERT (p_unit->page->operations->type != VM_UNINIT);
+			printf("copied inited spt %x.\n", p_unit->page->va);
 			if (!pml4_set_page (thread_current ()->pml4, c_unit->page->va, c_unit->page->frame->kva, false)) {
 				free(c_unit->page);
 				free(c_unit);
 				return false;
 			}
-
+			
 			uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
 			if (*p_pte & PTE_W) {
 				*p_pte = *p_pte & ~PTE_W;
 			}
+			
 		}
 
 		list_push_back(&dst->spt_table, &c_unit->elem_spt);
-		
+		*/
+		struct spt_unit *p_unit = list_entry (i, struct spt_unit, elem_spt);
+
+		if (p_unit->page->operations->type == VM_UNINIT) {
+			vm_alloc_page_with_initializer (p_unit->page->uninit.type, p_unit->page->va, 
+				p_unit->writable, p_unit->page->uninit.init, p_unit->page->uninit.aux);
+			struct page *new_page = spt_find_page (dst, p_unit->page->va);
+			new_page->unit->is_stack = p_unit->is_stack;
+			new_page->unit->uninited = p_unit->uninited;
+			new_page->unit->writable = p_unit->writable;
+		}
+		else if (p_unit->page->operations->type == VM_ANON) {
+			vm_alloc_page (VM_ANON, p_unit->page->va, p_unit->writable);
+			struct page *new_page = spt_find_page (dst, p_unit->page->va);
+			vm_do_claim_page (new_page, p_unit->writable);
+			memcpy (new_page->frame->kva, p_unit->page->frame->kva, PGSIZE);
+		}
 	}
 	return true;
 }
@@ -377,6 +393,7 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		struct spt_unit *cur_unit = list_entry(i, struct spt_unit, elem_spt);
 		i = list_remove(i);
 		destroy (cur_unit->page);
+		free(cur_unit->page);
 		free(cur_unit);
 	}
 }

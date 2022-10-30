@@ -75,6 +75,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_FORK:
 			f->R.rax = fork ((char *) f->R.rdi, f);
+			printf("know exit the syscall handler.\n");
 			break;
 		case SYS_EXEC:
 			f->R.rax = exec ((char *) f->R.rdi);
@@ -133,11 +134,13 @@ void exit (int status){
 }
 
 tid_t fork (const char *thread_name, struct intr_frame *if_){
+	printf("%s called fork.\n", thread_name);
 	tid_t forked_child = process_fork(thread_name, if_);
 	if (forked_child == TID_ERROR) {
 		return -1;
 	}
 	else {
+		printf("fork may successed to create %d.\n", forked_child);
 		return forked_child;
 	}
 }
