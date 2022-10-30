@@ -321,7 +321,9 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 
 	struct list_elem *i;
 	for (i = list_begin(&spt->spt_table); i != list_end(&spt->spt_table);){
-		i = list_remove (i);
-		free (list_entry(i, struct spt_unit, elem_spt));
-	}
+		struct spt_unit *cur_unit = list_entry(i, struct spt_unit, elem_spt);
+		i = list_remove(i);
+		destroy (cur_unit->page);
+		free(cur_unit);
+	}	
 }
