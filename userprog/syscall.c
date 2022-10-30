@@ -64,6 +64,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	int syscall_no = (int) f->R.rax;
 	enum intr_level old_level;
 	old_level = intr_disable ();
+	thread_current ()->rsp_stack_growth = f->rsp;
 
 	switch (syscall_no) {
 		case SYS_HALT:

@@ -914,6 +914,7 @@ setup_stack (struct intr_frame *if_) {
 			return success;
 		} 
 		
+		page->unit->uninited = false;
 		page->unit->is_stack = true;
 		if_->rsp = USER_STACK;
 		success = true;

@@ -185,7 +185,6 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED, struct thread *cur) {
-	/*
 	if (page->unit->flag_cow) {
 		if (list_size(&page->frame->pages)>1){
 			struct frame *old_frame = page->frame;
@@ -202,7 +201,6 @@ vm_handle_wp (struct page *page UNUSED, struct thread *cur) {
 
 	}
 	else return false;
-	*/
 }
 
 /* Return true on success */
@@ -215,17 +213,31 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
+	if (is_kernel_vaddr(addr)) {
+		return false;
+	}
 	page = spt_find_page(spt, pg_round_down(addr));
 	if (page == NULL) {
-		PANIC("TODO");
+		void *rsp = user ? f->rsp : thread_current()->rsp_stack_growth;
+		if (rsp != addr + 8) return false;
+		if ((USER_STACK > addr) && (addr > USER_STACK - 0xfffff)) {
+			vm_stack_growth (addr);
+			return true;
+		}
+		else {
+			return false;
+		}
 	}
 	else {
-		if (page->unit->is_stack || page->unit->uninited){
-			// page->unit->uninited = false;
+		if (page->unit->uninited && not_present){
+			page->unit->uninited = false;
 			return vm_do_claim_page(page, true);
 		}
+		else if (!not_present) {
+			ASSERT (page->unit->uninited == false);
+			return vm_handle_wp (page, thread_current ());
+		}
 		else return false;
-
 	}
 }
 
@@ -283,7 +295,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 
 		c_unit->is_stack = p_unit->is_stack;
 		c_unit->uninited = p_unit->uninited;
-		// c_unit->flag_cow = p_unit->flag_cow;
+		c_unit->flag_cow = p_unit->flag_cow;
 		c_unit->page = malloc (sizeof(struct page));
 		if (c_unit->page == NULL) {
 			free(c_unit);
@@ -299,14 +311,14 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			free(c_unit);
 			return false;
 		}
-		/*
+		
 		uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
 		if (*p_pte & PTE_W) {
 			*p_pte = *p_pte | ~PTE_W;
 			p_unit->flag_cow = true;
 			c_unit->flag_cow = true;
 		}
-		*/
+		
 		list_push_back(&dst->spt_table, &c_unit->elem_spt);
 		
 	}
@@ -325,5 +337,5 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		i = list_remove(i);
 		destroy (cur_unit->page);
 		free(cur_unit);
-	}	
+	}
 }
