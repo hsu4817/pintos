@@ -198,12 +198,15 @@ vm_handle_wp (struct page *page UNUSED, struct thread *cur) {
 	if (page->unit->writable) {
 		if (list_size(&page->cow_layer->pages)>1){
 			struct frame *old_frame = page->frame;
+			pml4_clear_page (cur->pml4, page->va);
 			vm_do_claim_page (page, true);
 			memcpy(page->frame->kva, old_frame->kva, PGSIZE);
+			return true;
 		}
 		else {
 			uint64_t *cur_pte = pml4e_walk (cur->pml4, page->va, false);
 			*cur_pte = *cur_pte | PTE_W;
+			return true;
 		}
 	}
 	else return false;
@@ -354,7 +357,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 
 			uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
 			if (*p_pte & PTE_W) {
-				*p_pte = *p_pte | ~PTE_W;
+				*p_pte = *p_pte & ~PTE_W;
 			}
 		}
 
