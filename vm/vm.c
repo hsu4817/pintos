@@ -74,6 +74,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		if (new_cow == NULL) {
 			destroy (new_page);
 			free(new_page);
+			goto err;
 		}
 		list_init (&new_cow->pages);
 		list_push_back (&new_cow->pages, &new_page->elem_cow);
@@ -82,6 +83,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		if (spt_insert_page (spt, new_page)){
 			new_page->unit->uninited = true;
+			new_page->unit->writable = writable;
 			// printf("added %x to pending pg.\n", new_page->va);
 			return true;
 		}
@@ -134,7 +136,6 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	unit->page = page;
 	unit->is_stack = false;
 	unit->uninited = false;
-	unit->flag_cow = false;
 	page->unit = unit;
 	list_push_front (&spt->spt_table, &unit->elem_spt);
 
@@ -177,6 +178,7 @@ vm_get_frame (void) {
 
 	frame = malloc(sizeof(struct frame));
 	frame->kva = palloc_get_page (PAL_USER);
+	frame->cow_layer = NULL;
 	if (frame->kva == NULL) {
 		PANIC ("todo");
 	}
@@ -193,19 +195,16 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED, struct thread *cur) {
-	if (page->unit->flag_cow) {
+	if (page->unit->writable) {
 		if (list_size(&page->cow_layer->pages)>1){
 			struct frame *old_frame = page->frame;
 			vm_do_claim_page (page, true);
 			memcpy(page->frame->kva, old_frame->kva, PGSIZE);
-			page->unit->flag_cow = false;
 		}
 		else {
 			uint64_t *cur_pte = pml4e_walk (cur->pml4, page->va, false);
 			*cur_pte = *cur_pte | PTE_W;
-			page->unit->flag_cow = false;
 		}
-
 	}
 	else return false;
 }
@@ -221,6 +220,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Your code goes here */
 
 	if (is_kernel_vaddr(addr)) {
+		// PANIC("kerneladdr.\n");
 		return false;
 	}
 	page = spt_find_page(spt, pg_round_down(addr));
@@ -232,19 +232,23 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 			return true;
 		}
 		else {
+			// PANIC("faild to handle no_spt case.\n");
 			return false;
 		}
 	}
 	else {
 		if (page->unit->uninited && not_present){
 			page->unit->uninited = false;
-			return vm_do_claim_page(page, write);
+			return vm_do_claim_page(page, page->unit->writable);
 		}
 		else if (!not_present) {
 			ASSERT (page->unit->uninited == false);
 			return vm_handle_wp (page, thread_current ());
 		}
-		else return false;
+		else {
+			// PANIC("faild to handle spt_exist case.\n");
+			return false;
+		}
 	}
 }
 
@@ -330,7 +334,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 
 		c_unit->is_stack = p_unit->is_stack;
 		c_unit->uninited = p_unit->uninited;
-		c_unit->flag_cow = p_unit->flag_cow;
+		c_unit->writable = p_unit->writable;
 		c_unit->page = malloc (sizeof(struct page));
 		if (c_unit->page == NULL) {
 			free(c_unit);
@@ -351,8 +355,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
 			if (*p_pte & PTE_W) {
 				*p_pte = *p_pte | ~PTE_W;
-				p_unit->flag_cow = true;
-				c_unit->flag_cow = true;
 			}
 		}
 
@@ -367,7 +369,6 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-
 	struct list_elem *i;
 	for (i = list_begin(&spt->spt_table); i != list_end(&spt->spt_table);){
 		struct spt_unit *cur_unit = list_entry(i, struct spt_unit, elem_spt);

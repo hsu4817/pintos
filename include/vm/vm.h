@@ -100,7 +100,7 @@ struct spt_unit {
 	struct page *page;
 	bool is_stack;
 	bool uninited;
-	bool flag_cow;
+	bool writable;
 
 	struct list_elem elem_spt;
 };
