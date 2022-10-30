@@ -48,7 +48,8 @@ struct page {
 
 	/* Your implementation */
 	struct spt_unit *unit;
-	struct list_elem elem_frame;
+	struct cow_layer_t *cow_layer;
+	struct list_elem elem_cow;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -65,7 +66,7 @@ struct page {
 /* The representation of "frame" */
 struct frame {
 	void *kva;
-	struct list pages;
+	struct cow_layer_t *cow_layer;
 };
 
 /* The function table for page operations.
@@ -102,6 +103,11 @@ struct spt_unit {
 	bool flag_cow;
 
 	struct list_elem elem_spt;
+};
+
+struct cow_layer_t {
+	struct list pages;
+	struct frame *frame;
 };
 
 

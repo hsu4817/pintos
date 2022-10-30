@@ -70,6 +70,16 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 				break;
 		}
 		
+		struct cow_layer_t *new_cow = malloc(sizeof(struct cow_layer_t));
+		if (new_cow == NULL) {
+			destroy (new_page);
+			free(new_page);
+		}
+		list_init (&new_cow->pages);
+		list_push_back (&new_cow->pages, &new_page->elem_cow);
+		new_page->cow_layer = new_cow;
+		new_cow->frame = NULL;
+
 		if (spt_insert_page (spt, new_page)){
 			new_page->unit->uninited = true;
 			// printf("added %x to pending pg.\n", new_page->va);
@@ -166,14 +176,12 @@ vm_get_frame (void) {
 	/* TODO: Fill this function. */
 
 	frame = malloc(sizeof(struct frame));
-	list_init(&frame->pages);
 	frame->kva = palloc_get_page (PAL_USER);
 	if (frame->kva == NULL) {
 		PANIC ("todo");
 	}
 
 	ASSERT (frame != NULL);
-	ASSERT (list_empty (&frame->pages));
 	return frame;
 }
 
@@ -186,9 +194,8 @@ vm_stack_growth (void *addr UNUSED) {
 static bool
 vm_handle_wp (struct page *page UNUSED, struct thread *cur) {
 	if (page->unit->flag_cow) {
-		if (list_size(&page->frame->pages)>1){
+		if (list_size(&page->cow_layer->pages)>1){
 			struct frame *old_frame = page->frame;
-			list_remove (&page->elem_frame);
 			vm_do_claim_page (page, true);
 			memcpy(page->frame->kva, old_frame->kva, PGSIZE);
 			page->unit->flag_cow = false;
@@ -231,7 +238,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	else {
 		if (page->unit->uninited && not_present){
 			page->unit->uninited = false;
-			return vm_do_claim_page(page, true);
+			return vm_do_claim_page(page, write);
 		}
 		else if (!not_present) {
 			ASSERT (page->unit->uninited == false);
@@ -262,11 +269,39 @@ vm_claim_page (void *va UNUSED) {
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page, bool writable) {
-	struct frame *frame = vm_get_frame ();
-
+	struct frame *frame = NULL;
 	/* Set links */
-	list_push_back (&frame->pages, &page->elem_frame);
-	page->frame = frame;
+	if (writable) {
+		frame = vm_get_frame ();
+		if (list_size(&page->cow_layer->pages) > 1){
+			struct cow_layer_t *new_cow = malloc(sizeof(struct cow_layer_t));
+			list_remove(&page->elem_cow);
+
+			list_init(&new_cow->pages);
+			list_push_back(&new_cow->pages, &page->elem_cow);
+			new_cow->frame = frame;
+			page->cow_layer = new_cow;
+			frame->cow_layer = new_cow;
+			page->frame = frame;
+		}
+		else {
+			page->cow_layer->frame = frame;
+			page->frame = frame;
+			frame->cow_layer = page->cow_layer;
+		} 
+	}
+	else {
+		if (page->cow_layer->frame == NULL) {
+			frame = vm_get_frame ();
+			page->cow_layer->frame = frame;
+			frame->cow_layer = page->cow_layer;
+			page->frame = frame;
+		}
+		else {
+			page->frame = page->cow_layer->frame;
+			frame = page->frame;
+		}
+	}
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct supplemental_page_table *spt = &thread_current ()->spt;
@@ -304,21 +339,23 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		memcpy (c_unit->page, p_unit->page, sizeof(*p_unit->page));
 		c_unit->page->unit = c_unit;
 
-		list_push_back(&p_unit->page->frame->pages, &c_unit->page->elem_frame);
+		list_push_back(&p_unit->page->cow_layer->pages, &c_unit->page->elem_cow);
 		
-		if (!pml4_set_page (thread_current ()->pml4, c_unit->page->va, c_unit->page->frame->kva, false)) {
-			free(c_unit->page);
-			free(c_unit);
-			return false;
+		if (p_unit->uninited == false) {
+			if (!pml4_set_page (thread_current ()->pml4, c_unit->page->va, c_unit->page->frame->kva, false)) {
+				free(c_unit->page);
+				free(c_unit);
+				return false;
+			}
+
+			uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
+			if (*p_pte & PTE_W) {
+				*p_pte = *p_pte | ~PTE_W;
+				p_unit->flag_cow = true;
+				c_unit->flag_cow = true;
+			}
 		}
-		
-		uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
-		if (*p_pte & PTE_W) {
-			*p_pte = *p_pte | ~PTE_W;
-			p_unit->flag_cow = true;
-			c_unit->flag_cow = true;
-		}
-		
+
 		list_push_back(&dst->spt_table, &c_unit->elem_spt);
 		
 	}
