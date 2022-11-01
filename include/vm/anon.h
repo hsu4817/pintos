@@ -5,6 +5,8 @@ struct page;
 enum vm_type;
 
 struct anon_page {
+    struct list_elem swap_elem_a;
+    disk_sector_t page_sec_start; /*where is anon_page stored in swap_disk*/
 };
 
 void vm_anon_init (void);
