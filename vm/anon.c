@@ -57,6 +57,5 @@ anon_destroy (struct page *page) {
 	free (page->frame);
 	list_remove (&page->elem_cow);
 	free (page->cow_layer);
-	free (page);
 	return;
 }

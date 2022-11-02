@@ -54,7 +54,6 @@ file_backed_destroy (struct page *page) {
 	free (page->frame);
 	list_remove (&page->elem_cow);
 	free (page->cow_layer);
-	free (page);
 	return;
 }
 
@@ -120,24 +119,22 @@ do_munmap (void *addr) {
 		if (upage->operations->type == VM_UNINIT) {
 			// printf("type of uninit.\n");
 			struct spt_unit *unit = upage->unit;
-			destroy (upage);
+			vm_dealloc_page (upage);
 			list_remove (&unit->elem_spt);
 			free (unit);
 		}
 		else if (upage->operations->type == VM_FILE) {
 			// printf("type of file.\n");
-			printf ("%s",upage->frame->kva);
-			uint64_t *pte = pml4e_walk (&cur->pml4, upage->va, false);
+			uint64_t *pte = pml4e_walk (cur->pml4, upage->va, false);
 			if (pte != NULL) {
 				if (*pte & PTE_D) {
-					printf("has writed.\n");
 					file_write_at (upage->file.file, upage->frame->kva, upage->file.size, upage->file.offset);
 				}
 			}
 			pml4_clear_page (&cur->pml4, upage->va);
 			struct spt_unit *unit = upage->unit;
 			list_remove (&unit->elem_spt);
-			destroy (upage);
+			vm_dealloc_page (upage);
 			free (unit);
 		}
 

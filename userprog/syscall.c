@@ -430,6 +430,7 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 	if (offset % PGSIZE != 0) return NULL;
 
 	file_lock_aquire ();
+	intr_enable ();
 	void *va = do_mmap (addr, length, writable, file, offset);
 	file_lock_release ();
 	return va;
@@ -438,6 +439,7 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 void 
 munmap (void *addr) {
 	file_lock_aquire ();
+	intr_enable ();
 	do_munmap (addr);
 	file_lock_release ();
 	return;

@@ -398,10 +398,11 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	 * TODO: writeback all the modified contents to the storage. */
 	struct list_elem *i;
 	struct thread *cur = thread_current ();
+	if (cur->is_kernel) return;
 	for (i = list_begin(&spt->spt_table); i != list_end(&spt->spt_table);){
 		struct spt_unit *cur_unit = list_entry(i, struct spt_unit, elem_spt);
 		i = list_remove(i);
-		destroy (cur_unit->page);
+		vm_dealloc_page (cur_unit->page);
 		free(cur_unit);
 	}
 }

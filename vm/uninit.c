@@ -74,6 +74,5 @@ uninit_destroy (struct page *page) {
 	 * TODO: If you don't have anything to do, just return. */
 	list_remove (&page->elem_cow);
 	free (page->cow_layer);
-	free (page);
 	return;
 }
