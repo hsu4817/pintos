@@ -22,6 +22,7 @@
 #include "lib/kernel/stdio.h"
 #include "devices/timer.h"
 #include "filesys/inode.h"
+#include "vm/file.h"
 
 
 
@@ -75,7 +76,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_FORK:
 			f->R.rax = fork ((char *) f->R.rdi, f);
-			printf("know exit the syscall handler.\n");
 			break;
 		case SYS_EXEC:
 			f->R.rax = exec ((char *) f->R.rdi);
@@ -113,6 +113,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_DUP2:
 			f->R.rax = dup2 (f->R.rdi, f->R.rsi);
 			break;
+		case SYS_MMAP:
+			f->R.rax = mmap (f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+			break;
+		case SYS_MUNMAP:
+			munmap (f->R.rdi);
+			break;
 		default:
 			printf ("Unknown syscall number %d.\n", syscall_no);
 			thread_exit ();
@@ -134,13 +140,11 @@ void exit (int status){
 }
 
 tid_t fork (const char *thread_name, struct intr_frame *if_){
-	printf("%s called fork.\n", thread_name);
 	tid_t forked_child = process_fork(thread_name, if_);
 	if (forked_child == TID_ERROR) {
 		return -1;
 	}
 	else {
-		printf("fork may successed to create %d.\n", forked_child);
 		return forked_child;
 	}
 }
@@ -401,4 +405,40 @@ update_dup (struct file* file) {
 	}
 }
 
+/* Do the mmap */
+void *
+mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	struct thread *cur = thread_current ();
+	struct file *file;
 
+	//address validity check.
+	if (is_kernel_vaddr (addr)) return NULL;
+	if (pg_ofs(addr) != 0) return NULL;
+	if (addr == 0) return NULL;
+	for (uint64_t i = addr; i < (addr + length); i = i + PGSIZE) {
+		if (spt_find_page (&cur->spt, i) != NULL) return NULL;
+	}
+
+	//fd validity check.
+	file = get_file_with_fd (fd);
+	if (file == NULL) return NULL;
+	if (file == 1 || file == 2) return NULL;
+
+	//length and offset validity check.
+	if (length == 0) return NULL;
+	if (offset > file_length (file)) return NULL;
+	if (offset % PGSIZE != 0) return NULL;
+
+	file_lock_aquire ();
+	void *va = do_mmap (addr, length, writable, file, offset);
+	file_lock_release ();
+	return va;
+}
+
+void 
+munmap (void *addr) {
+	file_lock_aquire ();
+	do_munmap (addr);
+	file_lock_release ();
+	return;
+}

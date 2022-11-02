@@ -28,7 +28,7 @@ vm_anon_init (void) {
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
-	memset (&page->uninit, 0, sizeof(struct anon_page));
+	memset (&page->uninit, 0, sizeof(struct uninit_page));
 
 	page->operations = &anon_ops;
 
@@ -54,5 +54,9 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	free (page->frame);
+	list_remove (&page->elem_cow);
+	free (page->cow_layer);
+	free (page);
 	return;
 }

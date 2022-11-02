@@ -84,6 +84,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		list_push_back (&new_cow->pages, &new_page->elem_cow);
 		new_page->cow_layer = new_cow;
 		new_cow->frame = NULL;
+		new_page->frame = NULL;
 
 		if (spt_insert_page (spt, new_page)){
 			new_page->unit->uninited = true;
@@ -140,6 +141,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	unit->page = page;
 	unit->is_stack = false;
 	unit->uninited = false;
+	unit->mmap_mark = NULL;
 	page->unit = unit;
 	list_push_front (&spt->spt_table, &unit->elem_spt);
 
@@ -194,6 +196,10 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	void *va = pg_round_down (addr);
+	vm_alloc_page (VM_ANON, va, true);
+	vm_do_claim_page (spt_find_page (&thread_current ()->spt, va), true);
+	return;
 }
 
 /* Handle the fault on write_protected page */
@@ -249,7 +255,6 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		void *rsp = user ? f->rsp : thread_current()->rsp_stack_growth;
 		if (rsp != addr + 8) return false;
 		if ((USER_STACK > addr) && (addr > USER_STACK - 0xfffff)) {
-			printf("stack growth.\n");
 			vm_stack_growth (addr);
 			success = true;
 		}
@@ -260,11 +265,13 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	else {
 		if (page->unit->uninited && not_present){
+			ASSERT (page->operations->type == VM_UNINIT);
 			page->unit->uninited = false;
 			success = vm_do_claim_page(page, page->unit->writable);
 		}
 		else if (!not_present) {
 			ASSERT (page->unit->uninited == false);
+			PANIC("sadfjhklafsdjlhk");
 			success = vm_handle_wp (page, thread_current ());
 		}
 		else {
@@ -372,6 +379,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			new_page->unit->is_stack = p_unit->is_stack;
 			new_page->unit->uninited = p_unit->uninited;
 			new_page->unit->writable = p_unit->writable;
+			new_page->unit->mmap_mark = p_unit->mmap_mark;
 		}
 		else if (p_unit->page->operations->type == VM_ANON) {
 			vm_alloc_page (VM_ANON, p_unit->page->va, p_unit->writable);
@@ -389,11 +397,11 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	struct list_elem *i;
+	struct thread *cur = thread_current ();
 	for (i = list_begin(&spt->spt_table); i != list_end(&spt->spt_table);){
 		struct spt_unit *cur_unit = list_entry(i, struct spt_unit, elem_spt);
 		i = list_remove(i);
 		destroy (cur_unit->page);
-		free(cur_unit->page);
 		free(cur_unit);
 	}
 }
