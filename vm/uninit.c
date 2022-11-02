@@ -10,6 +10,7 @@
 
 #include "vm/vm.h"
 #include "vm/uninit.h"
+#include "threads/mmu.h"
 
 static bool uninit_initialize (struct page *page, void *kva);
 static void uninit_destroy (struct page *page);
@@ -50,10 +51,16 @@ uninit_initialize (struct page *page, void *kva) {
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
-
 	/* TODO: You may need to fix this function. */
-	return uninit->page_initializer (page, uninit->type, kva) &&
-		(init ? init (page, aux) : true);
+
+	if (uninit->page_initializer (page, uninit->type, kva) == false) {
+		return false;
+	}
+	if ((init ? init (page, aux) : true) == false) {
+		return false;
+	}
+
+	return true;
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
@@ -65,5 +72,7 @@ uninit_destroy (struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	list_remove (&page->elem_cow);
+	free (page->cow_layer);
 	return;
 }

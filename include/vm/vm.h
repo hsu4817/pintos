@@ -98,9 +98,12 @@ struct supplemental_page_table {
 struct spt_unit {
 	/* (seulke) TODO: put some arguments needed. */
 	struct page *page;
+
 	bool is_stack;
 	bool uninited;
 	bool writable;
+	uint64_t mmap_mark;
+	int mmap_count;
 
 	struct list_elem elem_spt;
 };
