@@ -8,6 +8,7 @@
 #include "threads/synch.h"
 
 static struct lock handler_lock;
+static struct list frame_list;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -22,6 +23,7 @@ vm_init (void) {
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
 	lock_init(&handler_lock);
+	list_init(&frame_list);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -90,6 +92,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			new_page->unit->uninited = true;
 			new_page->unit->writable = writable;
 			// printf("added %x to pending pg.\n", new_page->va);
+
+			new_page->anon.page_sec_start = 0;
 			return true;
 		}
 	}
@@ -159,6 +163,11 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
+	if(list_size(&frame_list) == 0){
+		return NULL;
+	}
+
+	victim = list_entry(list_begin(&frame_list), struct frame, frame_elem);
 
 	return victim;
 }
@@ -168,9 +177,15 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
+	if(victim == NULL) return NULL;
 	/* TODO: swap out the victim and return the evicted frame. */
+	struct list_elem *i;
+	for(i = list_begin(&victim->cow_layer->pages); i != list_end(&victim->cow_layer->pages); i = i->next){
+		swap_out(list_entry(i, struct page, elem_cow));
+	}
+	list_remove(&victim->frame_elem);
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -185,9 +200,11 @@ vm_get_frame (void) {
 	frame = malloc(sizeof(struct frame));
 	frame->kva = palloc_get_page (PAL_USER);
 	frame->cow_layer = NULL;
+
 	if (frame->kva == NULL) {
-		PANIC ("todo");
+		frame = vm_evict_frame();
 	}
+	list_push_back(&frame_list, &frame->frame_elem);
 
 	ASSERT (frame != NULL);
 	return frame;
