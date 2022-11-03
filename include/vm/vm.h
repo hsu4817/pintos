@@ -67,7 +67,7 @@ struct page {
 struct frame {
 	void *kva;
 	struct cow_layer_t *cow_layer;
-	struct list_elem frame_elem;
+	struct list_elem elem_frame;
 };
 
 /* The function table for page operations.

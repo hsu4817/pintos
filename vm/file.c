@@ -51,7 +51,11 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
-	free (page->frame);
+	if (page->frame != NULL) {
+		list_remove (&page->frame->elem_frame);
+		free (page->frame);
+	}
+
 	list_remove (&page->elem_cow);
 	free (page->cow_layer);
 	return;

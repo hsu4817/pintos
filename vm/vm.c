@@ -8,7 +8,7 @@
 #include "threads/synch.h"
 
 static struct lock handler_lock;
-static struct list frame_list;
+static struct list frame_table;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -23,7 +23,7 @@ vm_init (void) {
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
 	lock_init(&handler_lock);
-	list_init(&frame_list);
+	list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -159,11 +159,9 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
-	if(list_size(&frame_list) == 0){
-		return NULL;
-	}
 
-	victim = list_entry(list_begin(&frame_list), struct frame, frame_elem);
+	if (list_empty(&frame_table)) return NULL;
+	victim = list_entry (list_begin(&frame_table), struct frame, elem_frame);
 
 	return victim;
 }
@@ -173,13 +171,19 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
-	if(victim == NULL) return NULL;
-	/* TODO: swap out the victim and return the evicted frame. */
 	struct list_elem *i;
-	for(i = list_begin(&victim->cow_layer->pages); i != list_end(&victim->cow_layer->pages); i = list_next(i)){
-		swap_out(list_entry(i, struct page, elem_cow));
+	/* TODO: swap out the victim and return the evicted frame. */
+	if (victim == NULL) return NULL;
+		
+	for (i = list_begin (&victim->cow_layer->pages); i != list_end (&victim->cow_layer->pages); i = list_next(i)) {
+		struct page* vpage = list_entry(i, struct page, elem_cow);
+		swap_out (vpage);
+		vpage->frame = NULL;
 	}
-	list_remove(&victim->frame_elem);
+	victim->cow_layer->frame = NULL;
+	victim->cow_layer = NULL;
+
+	memset (victim->kva, 0, PGSIZE);
 
 	return victim;
 }
@@ -195,12 +199,12 @@ vm_get_frame (void) {
 
 	frame = malloc(sizeof(struct frame));
 	frame->kva = palloc_get_page (PAL_USER);
-	frame->cow_layer = NULL;
-
 	if (frame->kva == NULL) {
-		frame = vm_evict_frame();
+		free (frame);
+		frame = vm_evict_frame ();
 	}
-	list_push_back(&frame_list, &frame->frame_elem);
+	frame->cow_layer = NULL;
+	list_push_back (&frame_table, &frame->elem_frame);
 
 	ASSERT (frame != NULL);
 	return frame;
@@ -292,21 +296,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	else {
 		if (not_present){
-			if (page->operations->type == VM_UNINIT) {
-				success = vm_do_claim_page(page, page->unit->writable);
-				if (success == false) {
-					PANIC("todo : vm_do_claim failed.");
-				}
-			}
-			else if (page->operations->type == VM_ANON) {
-				PANIC("todo : swap in VM_ANON");
-			}
-			else if (page->operations->type == VM_FILE) {
-				PANIC("todo : swap in VM_FILE");
-			}
-			else {
-				PANIC ("page allocation logic error.\n");
-			}
+			success = vm_do_claim_page(page, page->unit->writable);
 		}
 		else if (!not_present) {
 			ASSERT (page->operations->type != VM_UNINIT);
