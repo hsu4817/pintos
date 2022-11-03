@@ -44,24 +44,22 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
-	struct anon_page *anon_page = &page->anon;
+	struct anon_page *cur = &page->anon;
 
 	struct list_elem *i;
-	bool tag = false;
-	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
-		if(i == anon_page) tag = true;
+	disk_sector_t disk_sec;
+
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next (i)){
+		if(i == &cur->swap_elem_a) {
+			list_remove (&cur->swap_elem_a);
+			break;
+		}
 	}
-	if(tag == false) return false;
 
-	page->frame->kva = kva;
-	
-
-	//이게 맞나? 고민됨
 	disk_sector_t disc_sec;
 	for(disc_sec = 0; disc_sec < 8; disc_sec++){
-		disk_read(swap_disk, page->anon.page_sec_start + disc_sec, page->frame->kva + DISK_SECTOR_SIZE*disc_sec);
+		disk_read(swap_disk, cur->page_sec_start + disc_sec, kva + DISK_SECTOR_SIZE*disc_sec);
 	}
-	list_remove(&(page->anon.swap_elem_a));
 
 	return true;
 }
@@ -69,20 +67,31 @@ anon_swap_in (struct page *page, void *kva) {
 /* Swap out the page by writing contents to the swap disk. */
 static bool
 anon_swap_out (struct page *page) {
-	struct anon_page *anon_page = &page->anon;
+	struct anon_page *cur = &page->anon;
 
 	struct list_elem *i;
-	bool tag = false;
-	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
-		if(i == anon_page) tag = true;
+	for (i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next(i)) {
+		if (list_next(i) == list_end(&swap_list)) {
+			list_push_back (&swap_list, &cur->swap_elem_a);
+			cur->page_sec_start = list_entry(i, struct anon_page, swap_elem_a)->page_sec_start + 8;
+			break;
+		}
+		if (list_entry(list_next (i), struct anon_page, swap_elem_a)->page_sec_start - list_entry(i, struct anon_page, swap_elem_a)->page_sec_start >= 16) {
+			list_insert (list_next(i), &cur->swap_elem_a);
+			cur->page_sec_start = list_entry (i, struct anon_page, swap_elem_a)->page_sec_start + 8;
+			break;
+		}
 	}
-	if(tag == false) return false;
 
-	disk_sector_t disc_sec;
-	for(disc_sec = 0; disc_sec < 8; disc_sec++){
-		disk_write(swap_disk, page->anon.page_sec_start + disc_sec, page->frame->kva + DISK_SECTOR_SIZE*disc_sec);
+	if (list_empty(&swap_list)) {
+		list_push_back(&swap_list, &cur->swap_elem_a);
+		cur->page_sec_start = 0;
 	}
-	list_remove(&(page->anon.swap_elem_a));
+
+	disk_sector_t disk_sec;
+	for (disk_sec = 0; disk_sec <8; disk_sec++) {
+		disk_write (swap_disk, cur->page_sec_start + disk_sec, page->frame->kva + DISK_SECTOR_SIZE * disk_sec);
+	}
 
 	return true;
 }
