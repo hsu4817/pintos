@@ -160,6 +160,9 @@ vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
 
+	if (list_empty(&frame_table)) return NULL;
+	victim = list_entry (list_begin(&frame_table), struct frame, elem_frame);
+
 	return victim;
 }
 
@@ -168,9 +171,21 @@ vm_get_victim (void) {
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
+	struct list_elem *i;
 	/* TODO: swap out the victim and return the evicted frame. */
+	if (victim == NULL) return NULL;
+		
+	for (i = list_begin (&victim->cow_layer->pages); i != list_end (&victim->cow_layer->pages); i = list_next(i)) {
+		struct page* vpage = list_entry(i, struct page, elem_cow);
+		swap_out (vpage);
+		vpage->frame = NULL;
+	}
+	victim->cow_layer->frame = NULL;
+	victim->cow_layer = NULL;
+	
+	memset (victim->kva, 0, PGSIZE);
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -184,10 +199,11 @@ vm_get_frame (void) {
 
 	frame = malloc(sizeof(struct frame));
 	frame->kva = palloc_get_page (PAL_USER);
-	frame->cow_layer = NULL;
 	if (frame->kva == NULL) {
-		PANIC ("todo");
+		free (frame);
+		frame = vm_evict_frame ();
 	}
+	frame->cow_layer = NULL;
 	list_push_back (&frame_table, &frame->elem_frame);
 
 	ASSERT (frame != NULL);
