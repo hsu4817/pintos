@@ -93,8 +93,8 @@ anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 
 	if (page->frame != NULL) {
-		free (page->frame);
 		list_remove (&page->frame->elem_frame);
+		free (page->frame);
 	}
 	
 	list_remove (&page->elem_cow);
