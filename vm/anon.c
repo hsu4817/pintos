@@ -51,8 +51,8 @@ anon_swap_in (struct page *page, void *kva) {
 	bool tag = false;
 	disk_sector_t disc_sec;
 
-	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
-		if(list_entry(i->next, struct anon_page, swap_elem_a) == anon_page){
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next(i)){
+		if(list_entry(list_next(i), struct anon_page, swap_elem_a) == anon_page){
 			tag = true;
 			break;
 		}
@@ -77,22 +77,23 @@ anon_swap_out (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 
 	struct list_elem *i;
-	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
-		if(list_size(&swap_list) == 0){
-			list_push_back(&swap_list, &anon_page->swap_elem_a);
-			anon_page->page_sec_start = 0;
-			break;
-		}
-		if(i->next == list_end(&swap_list)){
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next(i)){
+
+		if(list_next(i) == list_end(&swap_list)){
 			list_push_back(&swap_list, &anon_page->swap_elem_a);
 			anon_page->page_sec_start = list_entry(i, struct anon_page, swap_elem_a)->page_sec_start + 8;
 			break;
 		}
-		if(list_entry(i->next, struct anon_page, swap_elem_a)->page_sec_start - list_entry(i, struct anon_page, swap_elem_a)->page_sec_start == 16){
-			list_insert(i->next, &anon_page->swap_elem_a);
+		if(list_entry(list_next(i), struct anon_page, swap_elem_a)->page_sec_start - list_entry(i, struct anon_page, swap_elem_a)->page_sec_start == 16){
+			list_insert(list_next(i), &anon_page->swap_elem_a);
 			anon_page->page_sec_start = list_entry(i, struct anon_page, swap_elem_a)->page_sec_start + 8;
 			break;
 		}
+	}
+
+	if(list_size(&swap_list) == 0){
+		list_push_back(&swap_list, &anon_page->swap_elem_a);
+		anon_page->page_sec_start = 0;
 	}
 
 	disk_sector_t disc_sec;
@@ -113,8 +114,8 @@ anon_destroy (struct page *page) {
 
 	/*remove from the swap_list if there is*/
 	struct list_elem *i;
-	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
-		if(list_entry(i->next, struct anon_page, swap_elem_a) == anon_page){
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i = list_next(i)){
+		if(list_entry(list_next(i), struct anon_page, swap_elem_a) == anon_page){
 			list_remove(i);
 		}
 	}
