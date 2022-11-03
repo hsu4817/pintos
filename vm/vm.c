@@ -87,7 +87,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		new_page->frame = NULL;
 
 		if (spt_insert_page (spt, new_page)){
-			new_page->unit->uninited = true;
 			new_page->unit->writable = writable;
 			// printf("added %x to pending pg.\n", new_page->va);
 			return true;
@@ -140,7 +139,6 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	}
 	unit->page = page;
 	unit->is_stack = false;
-	unit->uninited = false;
 	unit->mmap_mark = NULL;
 	page->unit = unit;
 	list_push_front (&spt->spt_table, &unit->elem_spt);
@@ -254,8 +252,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	bool success = false;
-	lock_acquire(&handler_lock);
-
+	bool debug = false;
+	if (debug) printf("something wrong.\n");
+	
 	page = spt_find_page(spt, pg_round_down(addr));
 	if (is_kernel_vaddr(addr)) {
 		// PANIC("kerneladdr.\n");
@@ -263,30 +262,32 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	else if (page == NULL) {
 		void *rsp = user ? f->rsp : thread_current()->rsp_stack_growth;
-		if (rsp != addr + 8) return false;
-		if ((USER_STACK > addr) && (addr > USER_STACK - 0xfffff)) {
-			vm_stack_growth (addr);
-			success = true;
-		}
+		if (addr < rsp - 8) success = false;
 		else {
-			// PANIC("faild to handle no_spt case.\n");
-			success = false;
+			if ((USER_STACK > addr) && (addr >= USER_STACK - 0x100000)) {
+				vm_stack_growth (addr);
+				success = true;
+			}
+			else {
+				// PANIC("faild to handle no_spt case.\n");
+				success = false;
+			}
 		}
+
 	}
 	else {
 		if (not_present){
 			if (page->operations->type == VM_UNINIT) {
-				page->unit->uninited = false;
 				success = vm_do_claim_page(page, page->unit->writable);
 				if (success == false) {
-					// PANIC("todo : vm_do_claim failed.");
+					PANIC("todo : vm_do_claim failed.");
 				}
 			}
 			else if (page->operations->type == VM_ANON) {
-				// PANIC("todo : swap in VM_ANON");
+				PANIC("todo : swap in VM_ANON");
 			}
 			else if (page->operations->type == VM_FILE) {
-				// PANIC("todo : swap in VM_FILE");
+				PANIC("todo : swap in VM_FILE");
 			}
 			else {
 				PANIC ("page allocation logic error.\n");
@@ -307,11 +308,15 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 			success = false;
 		}
 	}
-
-	lock_release (&handler_lock);
-	if (!success) {
-		// printf("failed to handle page fault.\n");
+	if (debug){
+		if (!success) {
+			printf("failed to handle page fault on %x.\n", addr);
+		}
+		else {
+			printf("successed to handle page fault on %x.\n", addr);
+		}
 	}
+
 	return success;
 }
 
@@ -363,44 +368,9 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
-	
+
 	struct list_elem *i;
 	for (i = list_begin (&src->spt_table); i != list_end (&src->spt_table); i = list_next (i)) {
-		/*
-		struct spt_unit *c_unit = malloc(sizeof(struct spt_unit));
-		struct spt_unit *p_unit = list_entry (i, struct spt_unit, elem_spt);
-
-		c_unit->is_stack = p_unit->is_stack;
-		c_unit->uninited = p_unit->uninited;
-		c_unit->writable = p_unit->writable;
-		c_unit->page = malloc (sizeof(struct page));
-		if (c_unit->page == NULL) {
-			free(c_unit);
-			return false;
-		}
-		memcpy (c_unit->page, p_unit->page, sizeof(*p_unit->page));
-		c_unit->page->unit = c_unit;
-
-		list_push_back(&p_unit->page->cow_layer->pages, &c_unit->page->elem_cow);
-		
-		if (p_unit->uninited == false) {
-			ASSERT (p_unit->page->operations->type != VM_UNINIT);
-			printf("copied inited spt %x.\n", p_unit->page->va);
-			if (!pml4_set_page (thread_current ()->pml4, c_unit->page->va, c_unit->page->frame->kva, false)) {
-				free(c_unit->page);
-				free(c_unit);
-				return false;
-			}
-			
-			uint64_t *p_pte = pml4e_walk (src->owner->pml4, p_unit->page->va, false);
-			if (*p_pte & PTE_W) {
-				*p_pte = *p_pte & ~PTE_W;
-			}
-			
-		}
-
-		list_push_back(&dst->spt_table, &c_unit->elem_spt);
-		*/
 		struct spt_unit *p_unit = list_entry (i, struct spt_unit, elem_spt);
 		struct page *new_page = NULL;
 
@@ -410,37 +380,58 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			long long int *aux_ = p_unit->page->uninit.aux;
 			long long int *new_aux = malloc (sizeof(long long int) * aux_size);
 			file_lock_aquire ();
-			new_aux[0] = file_reopen (aux_[0]);
+			new_aux[0] = file_duplicate(aux_[0]);
 			file_lock_release ();
+			
+			if (new_aux[0] == NULL) {
+				printf ("fail to copy.\n");
+				return false;
+			}
 
 			for (int idx = 1; idx < aux_size; idx++) {
 				new_aux[idx] = aux_[idx];
 			}
-			vm_alloc_page_with_initializer (p_unit->page->uninit.type, p_unit->page->va, 
-				p_unit->writable, p_unit->page->uninit.init, new_aux);
+			if (vm_alloc_page_with_initializer (p_unit->page->uninit.type, p_unit->page->va, 
+				p_unit->writable, p_unit->page->uninit.init, new_aux) == false){
+					printf("fail to valloc.\n");
+					return false;
+				}
 			new_page = spt_find_page (dst, p_unit->page->va);
 
 		}
 		else if (p_unit->page->operations->type == VM_ANON) {
-			vm_alloc_page (VM_ANON, p_unit->page->va, p_unit->writable);
+			if (vm_alloc_page (VM_ANON, p_unit->page->va, p_unit->writable) == false){
+				printf("fail to valloc.\n");
+				return false;
+			}
 			new_page = spt_find_page (dst, p_unit->page->va);
-			vm_do_claim_page (new_page, p_unit->writable);
+			if (vm_do_claim_page (new_page, p_unit->writable) == false){
+				printf("fail to init page.\n");
+				return false;
+			}
 			memcpy (new_page->frame->kva, p_unit->page->frame->kva, PGSIZE);
 		}
 		else if (p_unit->page->operations->type == VM_FILE) {
-			vm_alloc_page (VM_FILE, p_unit->page->va, p_unit->writable);
+			if (vm_alloc_page (VM_FILE, p_unit->page->va, p_unit->writable) == false){
+				printf("fail to valloc.\n");
+				return false;				
+			};
 			new_page = spt_find_page (dst, p_unit->page->va);
-			vm_do_claim_page (new_page, p_unit->writable);
+			if (vm_do_claim_page (new_page, p_unit->writable) == false){
+				printf("fail to valloc.\n");
+				return false;								
+			}
 			memcpy (new_page->frame->kva, p_unit->page->frame->kva, PGSIZE);
 
-			new_page->file.file = file_reopen (p_unit->page->file.file);
+			file_lock_aquire ();
+			new_page->file.file = file_duplicate (p_unit->page->file.file);
+			file_lock_release ();
 			new_page->file.offset = p_unit->page->file.offset;
 			new_page->file.size = p_unit->page->file.size;
 		}
 		else return;
 
 		new_page->unit->is_stack = p_unit->is_stack;
-		new_page->unit->uninited = p_unit->uninited;
 		new_page->unit->writable = p_unit->writable;
 		new_page->unit->mmap_mark = p_unit->mmap_mark;
 		new_page->unit->mmap_count = p_unit->mmap_count;
@@ -479,5 +470,25 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 		i = list_remove(i);
 		vm_dealloc_page (cur_unit->page);
 		free(cur_unit);
+	}
+}
+
+void 
+munmap_all (void){
+	struct list_elem *i;
+	struct thread *cur = thread_current ();
+	struct supplemental_page_table *spt = &cur->spt;
+	if (cur->is_kernel) return;
+	if (list_empty (&spt->spt_table)) return;
+	
+	list_sort (&spt->spt_table, less_func_spt, NULL);
+
+	for (i = list_begin (&spt->spt_table); i != list_end (&spt->spt_table);) {
+		struct spt_unit *cur_unit = list_entry (i, struct spt_unit, elem_spt);
+		if (cur_unit->mmap_mark != NULL){
+			i = list_prev(i);
+			do_munmap (cur_unit->mmap_mark);
+		}
+		i = list_next(i);
 	}
 }

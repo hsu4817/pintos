@@ -367,12 +367,17 @@ process_exit (void) {
 	enum intr_level old_level;
 	old_level = intr_disable ();
 	file_lock_exit ();
+	file_lock_aquire ();
+
+	intr_enable ();
+	munmap_all ();
+	intr_disable ();
+
 	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	set_exit_log ();
 	// printf ("%d try sema up.\n", curr->tid);
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
-	file_lock_aquire ();
 	file_close (curr->excutable);
 
 	struct list_elem *i;
@@ -387,6 +392,7 @@ process_exit (void) {
 		list_remove (temp);
 		free (list_entry (temp, struct fdesc, elem));
 	}
+
 	file_lock_release ();
 
 	if (curr->someone_is_waiting) {
@@ -914,8 +920,7 @@ setup_stack (struct intr_frame *if_) {
 		if(!vm_claim_page(stack_bottom)){
 			return success;
 		} 
-		
-		page->unit->uninited = false;
+
 		page->unit->is_stack = true;
 		if_->rsp = USER_STACK;
 		thread_current ()->spt.lowest_stack = stack_bottom;
