@@ -48,6 +48,35 @@ anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
 
 	struct list_elem *i;
+	bool tag = false;
+	disk_sector_t disc_sec;
+
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
+		if(list_entry(i->next, struct anon_page, swap_elem_a) == anon_page){
+			tag = true;
+			break;
+		}
+	}
+	if(tag == false) return false;
+	list_remove(&(page->anon.swap_elem_a));
+
+	page->frame->kva = kva;
+	
+	for(disc_sec = 0; disc_sec < 8; disc_sec++){
+		disk_read(swap_disk, page->anon.page_sec_start + disc_sec, page->frame->kva + DISK_SECTOR_SIZE*disc_sec);
+	}
+
+	pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, true);
+
+	return true;
+}
+
+/* Swap out the page by writing contents to the swap disk. */
+static bool
+anon_swap_out (struct page *page) {
+	struct anon_page *anon_page = &page->anon;
+
+	struct list_elem *i;
 	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
 		if(list_size(&swap_list) == 0){
 			list_push_back(&swap_list, &anon_page->swap_elem_a);
@@ -66,40 +95,10 @@ anon_swap_in (struct page *page, void *kva) {
 		}
 	}
 
-	page->frame->kva = kva;
-	
 	disk_sector_t disc_sec;
-	for(disc_sec = 0; disc_sec < 8; disc_sec++){
-		disk_read(swap_disk, page->anon.page_sec_start + disc_sec, page->frame->kva + DISK_SECTOR_SIZE*disc_sec);
-	}
-
-	pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, true);
-
-	return true;
-}
-
-/* Swap out the page by writing contents to the swap disk. */
-static bool
-anon_swap_out (struct page *page) {
-	struct anon_page *anon_page = &page->anon;
-
-	struct list_elem *i;
-	bool tag = false;
-	disk_sector_t disc_sec;
-
-	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
-		if(list_entry(i->next, struct anon_page, swap_elem_a) == anon_page){
-			tag = true;
-			break;
-		}
-	}
-	if(tag == false) return false;
-
-
 	for(disc_sec = 0; disc_sec < 8; disc_sec++){
 		disk_write(swap_disk, page->anon.page_sec_start + disc_sec, page->frame->kva + DISK_SECTOR_SIZE*disc_sec);
 	}
-	list_remove(&(page->anon.swap_elem_a));
 
 	return true;
 }
