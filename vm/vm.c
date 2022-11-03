@@ -142,6 +142,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 	unit->page = page;
 	unit->is_stack = false;
 	unit->mmap_mark = NULL;
+	unit->owner = thread_current ();
 	page->unit = unit;
 	list_push_front (&spt->spt_table, &unit->elem_spt);
 
@@ -179,6 +180,7 @@ vm_evict_frame (void) {
 		struct page* vpage = list_entry(i, struct page, elem_cow);
 		swap_out (vpage);
 		vpage->frame = NULL;
+		pml4_clear_page (vpage->unit->owner->pml4, vpage->va);
 	}
 	victim->cow_layer->frame = NULL;
 	victim->cow_layer = NULL;
@@ -440,6 +442,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		new_page->unit->writable = p_unit->writable;
 		new_page->unit->mmap_mark = p_unit->mmap_mark;
 		new_page->unit->mmap_count = p_unit->mmap_count;
+		new_page->unit->owner = dst->owner;
 	}
 	return true;
 }

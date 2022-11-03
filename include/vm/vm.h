@@ -105,6 +105,7 @@ struct spt_unit {
 	bool writable;
 	uint64_t mmap_mark;
 	int mmap_count;
+	struct thread *owner;
 
 	struct list_elem elem_spt;
 };

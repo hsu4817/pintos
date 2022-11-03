@@ -71,22 +71,28 @@ anon_swap_out (struct page *page) {
 	struct anon_page *cur = &page->anon;
 
 	struct list_elem *i;
-	for (i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next(i)) {
-		if (list_next(i) == list_end(&swap_list)) {
-			list_push_back (&swap_list, &cur->swap_elem_a);
-			cur->page_sec_start = list_entry(i, struct anon_page, swap_elem_a)->page_sec_start + 8;
-			break;
-		}
-		if (list_entry(list_next (i), struct anon_page, swap_elem_a)->page_sec_start - list_entry(i, struct anon_page, swap_elem_a)->page_sec_start >= 16) {
-			list_insert (list_next(i), &cur->swap_elem_a);
-			cur->page_sec_start = list_entry (i, struct anon_page, swap_elem_a)->page_sec_start + 8;
-			break;
-		}
-	}
-
 	if (list_empty(&swap_list)) {
 		list_push_back(&swap_list, &cur->swap_elem_a);
 		cur->page_sec_start = 0;
+	}
+	else if (list_entry (list_begin (&swap_list), struct anon_page, swap_elem_a)->page_sec_start >=8){
+		list_push_front (&swap_list, &cur->swap_elem_a);
+		cur->page_sec_start = 0;
+	}
+
+	else {
+		for (i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next(i)) {
+			if (list_next(i) == list_end(&swap_list)) {
+				list_push_back (&swap_list, &cur->swap_elem_a);
+				cur->page_sec_start = list_entry(i, struct anon_page, swap_elem_a)->page_sec_start + 8;
+				break;
+			}
+			if (list_entry(list_next (i), struct anon_page, swap_elem_a)->page_sec_start - list_entry(i, struct anon_page, swap_elem_a)->page_sec_start >= 16) {
+				list_insert (list_next(i), &cur->swap_elem_a);
+				cur->page_sec_start = list_entry (i, struct anon_page, swap_elem_a)->page_sec_start + 8;
+				break;
+			}
+		}
 	}
 
 	disk_sector_t disk_sec;
