@@ -182,7 +182,7 @@ vm_evict_frame (void) {
 	}
 	victim->cow_layer->frame = NULL;
 	victim->cow_layer = NULL;
-	
+
 	memset (victim->kva, 0, PGSIZE);
 
 	return victim;
@@ -296,21 +296,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	else {
 		if (not_present){
-			if (page->operations->type == VM_UNINIT) {
-				success = vm_do_claim_page(page, page->unit->writable);
-				if (success == false) {
-					PANIC("todo : vm_do_claim failed.");
-				}
-			}
-			else if (page->operations->type == VM_ANON) {
-				PANIC("todo : swap in VM_ANON");
-			}
-			else if (page->operations->type == VM_FILE) {
-				PANIC("todo : swap in VM_FILE");
-			}
-			else {
-				PANIC ("page allocation logic error.\n");
-			}
+			success = vm_do_claim_page(page, page->unit->writable);
 		}
 		else if (!not_present) {
 			ASSERT (page->operations->type != VM_UNINIT);
