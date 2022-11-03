@@ -91,8 +91,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		if (spt_insert_page (spt, new_page)){
 			new_page->unit->writable = writable;
 			// printf("added %x to pending pg.\n", new_page->va);
-
-			new_page->anon.page_sec_start = 0;
 			return true;
 		}
 	}
@@ -269,9 +267,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	bool success = false;
-	bool debug = false;
-	if (debug) printf("something wrong.\n");
-	
+	bool debug = true;
+	if (debug) printf("trying handle %x.\n", pg_round_down (addr));
+
 	page = spt_find_page(spt, pg_round_down(addr));
 	if (is_kernel_vaddr(addr)) {
 		// PANIC("kerneladdr.\n");

@@ -53,13 +53,17 @@ uninit_initialize (struct page *page, void *kva) {
 	void *aux = uninit->aux;
 	/* TODO: You may need to fix this function. */
 
+	
 	if (uninit->page_initializer (page, uninit->type, kva) == false) {
 		return false;
 	}
-	if ((init ? init (page, aux) : true) == false) {
-		return false;
+	printf("page init done.\n");
+	if (init != NULL) {
+		printf("do lazy loading.\n");
+		if (init (page, aux) == false) return false;
+		printf("lazy loading done.\n");
 	}
-
+	
 	return true;
 }
 
