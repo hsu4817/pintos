@@ -92,6 +92,7 @@ struct supplemental_page_table {
 	// (seulke) don't know what should be included.
 	struct list spt_table;
 	struct thread *owner;
+	void *lowest_stack;
 };
 
 /* Unit of page metadata should be included in spt table. */
@@ -115,6 +116,7 @@ struct cow_layer_t {
 
 
 #include "threads/thread.h"
+bool less_func_spt (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void supplemental_page_table_init (struct supplemental_page_table *spt);
 bool supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src);

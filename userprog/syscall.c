@@ -23,6 +23,7 @@
 #include "devices/timer.h"
 #include "filesys/inode.h"
 #include "vm/file.h"
+#include "vm/vm.h"
 
 
 
@@ -30,6 +31,7 @@ void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 struct file* get_file_with_fd (int fd);
 void update_dup (struct file*);
+static bool ptr_is_writable (void *addr); 
 
 
 /* System call.
@@ -126,6 +128,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	intr_set_level (old_level);
 }
 
+static bool ptr_is_writable (void *addr) {
+	struct page *page = spt_find_page (&thread_current ()->spt, pg_round_down (addr));
+	if (page == NULL) {
+		return false;
+	}
+	return page->unit->writable;
+}
 
 void halt (void){
 	intr_enable ();
@@ -246,6 +255,11 @@ int read (int fd, void *buffer, unsigned size) {
 	if (file == NULL) return -1;
 	if (file == 1) return input_getc();
 	if (file == 2) return -1;
+
+	if (!ptr_is_writable (buffer)) {
+		// printf("buffer is not writable.\n");
+		exit(-1);
+	}
 
 	file_lock_aquire ();
 	intr_enable ();
@@ -411,10 +425,11 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 	struct thread *cur = thread_current ();
 	struct file *file;
 
-	//address validity check.
-	if (is_kernel_vaddr (addr)) return NULL;
+	//address and length validity check.
 	if (pg_ofs(addr) != 0) return NULL;
 	if (addr == 0) return NULL;
+	if (is_kernel_vaddr((uint64_t) addr + length) || is_kernel_vaddr((uint64_t) addr)) return NULL;
+	if ((uint64_t)addr + length <= (uint64_t) addr) return NULL; 
 	for (uint64_t i = addr; i < (addr + length); i = i + PGSIZE) {
 		if (spt_find_page (&cur->spt, i) != NULL) return NULL;
 	}
@@ -424,8 +439,7 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 	if (file == NULL) return NULL;
 	if (file == 1 || file == 2) return NULL;
 
-	//length and offset validity check.
-	if (length == 0) return NULL;
+	//offset validity check.
 	if (offset > file_length (file)) return NULL;
 	if (offset % PGSIZE != 0) return NULL;
 
