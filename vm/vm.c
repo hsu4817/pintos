@@ -8,6 +8,7 @@
 #include "threads/synch.h"
 
 static struct lock handler_lock;
+static struct list frame_table;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -22,6 +23,7 @@ vm_init (void) {
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
 	lock_init(&handler_lock);
+	list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -186,6 +188,7 @@ vm_get_frame (void) {
 	if (frame->kva == NULL) {
 		PANIC ("todo");
 	}
+	list_push_back (&frame_table, &frame->elem_frame);
 
 	ASSERT (frame != NULL);
 	return frame;

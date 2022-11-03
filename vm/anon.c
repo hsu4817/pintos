@@ -91,17 +91,25 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-	free (page->frame);
+
+	if (page->frame != NULL) {
+		free (page->frame);
+		list_remove (&page->frame->elem_frame);
+	}
+	
 	list_remove (&page->elem_cow);
 	free (page->cow_layer);
 
 	/*remove from the swap_list if there is*/
 	struct list_elem *i;
 	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next(i)){
-		if(i == anon_page){
+		if(list_entry(i, struct anon_page, swap_elem_a) == anon_page){
 			list_remove(i);
 			break;
 		}
 	}
+
+
+
 	return;
 }
