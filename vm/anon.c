@@ -18,15 +18,12 @@ static const struct page_operations anon_ops = {
 };
 
 /* Initialize the data for anonymous pages */
-struct list *swap_list; /*list for swapping anon pages*/
-disk_sector_t disk_sec; /*overall disk_sec*/
+struct list swap_list; /*list for swapping anon pages*/
 void
 vm_anon_init (void) {
 	/* TODO: Set up the swap_disk. */
 	swap_disk = disk_get(1,1);
-	swap_list = malloc(sizeof(struct list));
-	list_init(swap_list);
-	disk_sec = 0;
+	list_init (&swap_list);
 }
 
 /* Initialize the file mapping */
@@ -39,9 +36,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	struct anon_page *anon_page = &page->anon;
 
 	/*my implementation*/
-	list_push_back(swap_list, &anon_page->swap_elem_a);
-	anon_page->page_sec_start = disk_sec;
-	disk_sec = disk_sec + 8;
+	anon_page->page_sec_start = 0;
 
 	return true;
 }
@@ -53,7 +48,7 @@ anon_swap_in (struct page *page, void *kva) {
 
 	struct list_elem *i;
 	bool tag = false;
-	for(i = list_begin(swap_list); i != list_end(swap_list); i = i->next){
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
 		if(i == anon_page) tag = true;
 	}
 	if(tag == false) return false;
@@ -78,7 +73,7 @@ anon_swap_out (struct page *page) {
 
 	struct list_elem *i;
 	bool tag = false;
-	for(i = list_begin(swap_list); i != list_end(swap_list); i = i->next){
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = i->next){
 		if(i == anon_page) tag = true;
 	}
 	if(tag == false) return false;
@@ -102,11 +97,11 @@ anon_destroy (struct page *page) {
 
 	/*remove from the swap_list if there is*/
 	struct list_elem *i;
-	for(i = list_begin(swap_list); i != list_end(swap_list); i = i->next){
+	for(i = list_begin(&swap_list); i != list_end(&swap_list); i = list_next(i)){
 		if(i == anon_page){
 			list_remove(i);
+			break;
 		}
 	}
-
 	return;
 }
