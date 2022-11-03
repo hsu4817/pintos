@@ -118,7 +118,6 @@ anon_destroy (struct page *page) {
 			list_remove(i);
 		}
 	}
-	free(&page->anon);
 
 	return;
 }

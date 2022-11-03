@@ -267,7 +267,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	bool success = false;
-	bool debug = true;
+	bool debug = false;
 	if (debug) printf("trying handle %x.\n", pg_round_down (addr));
 
 	page = spt_find_page(spt, pg_round_down(addr));
