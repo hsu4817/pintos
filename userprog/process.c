@@ -237,7 +237,6 @@ __do_fork (void *aux[]) {
 	file_lock_aquire ();
 	current->parent = parent;
 	current->excutable = file_duplicate (parent->excutable);
-	file_deny_write (current->excutable);
 	file_lock_release ();
 
 	if (!process_init ()){
@@ -368,12 +367,17 @@ process_exit (void) {
 	enum intr_level old_level;
 	old_level = intr_disable ();
 	file_lock_exit ();
+	file_lock_aquire ();
+
+	intr_enable ();
+	munmap_all ();
+	intr_disable ();
+
 	if (!curr->is_kernel) printf ("%s: exit(%d)\n", curr->name, curr->exit_status);
 	set_exit_log ();
 	// printf ("%d try sema up.\n", curr->tid);
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
-	file_lock_aquire ();
 	file_close (curr->excutable);
 
 	struct list_elem *i;
@@ -388,6 +392,7 @@ process_exit (void) {
 		list_remove (temp);
 		free (list_entry (temp, struct fdesc, elem));
 	}
+
 	file_lock_release ();
 
 	if (curr->someone_is_waiting) {
@@ -553,6 +558,12 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	if (t->excutable != NULL) {
+		file_close (t->excutable);
+	}
+	t->excutable = file;
+	file_deny_write (file);
+
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
@@ -629,11 +640,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	enum intr_level oold_level = intr_disable (); //Interrupt off.
-	if (t->excutable != NULL) {
-		file_close (t->excutable);
-	}
-	t->excutable = file;
-	file_deny_write (file);
+
 	
 	char *token, *save_ptr;
 	
@@ -838,12 +845,11 @@ lazy_load_segment (struct page *page, void *aux) {
 	uint32_t page_read_bytes = aux_[2];
 	uint32_t page_zero_bytes = aux_[3];
 
-	off_t old_pos = file_tell (file);
 	file_seek (file, ofs);
 	if (file_read (file, page->frame->kva, page_read_bytes) != page_read_bytes) return false;
 	memset (page->frame->kva + page_read_bytes, 0, page_zero_bytes);
 	free (aux);
-	file_seek (file, old_pos);
+	file_close (file);
 
 	return true;
 }
@@ -880,7 +886,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		
 		long long int *aux = (long long int*) malloc (sizeof(long long int) * 4);
-		aux[0] = (long long int) file;
+		aux[0] = (long long int) file_duplicate(file);
 		aux[1] = (long long int) ofs + (PGSIZE * prev_pagecnt);
 		aux[2] = (long long int) page_read_bytes;
 		aux[3] = (long long int) page_zero_bytes;
@@ -914,11 +920,10 @@ setup_stack (struct intr_frame *if_) {
 		if(!vm_claim_page(stack_bottom)){
 			return success;
 		} 
-		
-		page->unit->uninited = false;
+
 		page->unit->is_stack = true;
-		page->unit->writable = true;
 		if_->rsp = USER_STACK;
+		thread_current ()->spt.lowest_stack = stack_bottom;
 		success = true;
 	}
 	

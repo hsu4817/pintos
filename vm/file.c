@@ -65,14 +65,13 @@ do_mmap (void *addr, size_t length, int writable,
 	unsigned long read_bytes = length;
 	void *upage = addr;
 	struct page *first = NULL;
-	struct file *file_ = file_reopen (file);
 
 	int prev_pagecnt = 0;
 	while (read_bytes > 0) {
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 
-		long long int *aux = (long long int*) malloc (sizeof(long long int) * 4);
-		aux[0] = (long long int) file_;
+		long long int *aux = (long long int*) malloc (sizeof(long long int) * 3);
+		aux[0] = (long long int) file_duplicate (file);
 		aux[1] = (long long int) offset + (PGSIZE * prev_pagecnt);
 		aux[2] = (long long int) page_read_bytes;
 
@@ -111,7 +110,6 @@ do_munmap (void *addr) {
 	}
 
 	pgcnt = upage->unit->mmap_count;
-	file = upage->file.file;
 	
 	for (int i = 0; i < pgcnt; i++) {
 		ASSERT (upage != NULL);
@@ -119,6 +117,8 @@ do_munmap (void *addr) {
 		if (upage->operations->type == VM_UNINIT) {
 			// printf("type of uninit.\n");
 			struct spt_unit *unit = upage->unit;
+			long long int *aux_ = upage->uninit.aux; 
+			file_close (aux_[0]);
 			vm_dealloc_page (upage);
 			list_remove (&unit->elem_spt);
 			free (unit);
@@ -131,6 +131,7 @@ do_munmap (void *addr) {
 					file_write_at (upage->file.file, upage->frame->kva, upage->file.size, upage->file.offset);
 				}
 			}
+			file_close (upage->file.file);
 			pml4_clear_page (&cur->pml4, upage->va);
 			struct spt_unit *unit = upage->unit;
 			list_remove (&unit->elem_spt);
@@ -141,11 +142,6 @@ do_munmap (void *addr) {
 		addr += PGSIZE;
 		upage = spt_find_page (&cur->spt, addr);
 	}
-
-	file_close (file);
-
-	
-	
 }
 
 static bool
