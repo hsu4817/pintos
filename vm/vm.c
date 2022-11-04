@@ -377,6 +377,10 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
 
 	struct list_elem *i;
+	struct file *copied_file = NULL;
+	list_sort (&src->spt_table, less_func_spt, NULL);
+
+
 	for (i = list_begin (&src->spt_table); i != list_end (&src->spt_table); i = list_next (i)) {
 		struct spt_unit *p_unit = list_entry (i, struct spt_unit, elem_spt);
 		struct page *new_page = NULL;
@@ -386,15 +390,25 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 
 			long long int *aux_ = p_unit->page->uninit.aux;
 			long long int *new_aux = malloc (sizeof(long long int) * aux_size);
-			file_lock_aquire ();
-			new_aux[0] = file_duplicate(aux_[0]);
-			file_lock_release ();
-			
-			if (new_aux[0] == NULL) {
+			if (new_aux == NULL) {
 				printf ("fail to copy.\n");
 				return false;
 			}
 
+			if (p_unit->page->uninit.type == VM_ANON) {
+				file_lock_aquire ();
+				new_aux[0] = file_duplicate (aux_[0]);
+				file_lock_release ();			
+			}
+			else {
+				if (p_unit->mmap_mark != NULL) {
+					file_lock_aquire ();
+					copied_file = file_duplicate (aux_[0]);
+					file_lock_release ();
+				}
+				new_aux[0] = copied_file;
+			}
+		
 			for (int idx = 1; idx < aux_size; idx++) {
 				new_aux[idx] = aux_[idx];
 			}
@@ -430,9 +444,13 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			}
 			memcpy (new_page->frame->kva, p_unit->page->frame->kva, PGSIZE);
 
-			file_lock_aquire ();
-			new_page->file.file = file_duplicate (p_unit->page->file.file);
-			file_lock_release ();
+			if (p_unit->mmap_mark != NULL) {
+				file_lock_aquire ();
+				copied_file = file_duplicate (p_unit->page->file.file);
+				file_lock_release ();
+			}
+
+			new_page->file.file = copied_file;
 			new_page->file.offset = p_unit->page->file.offset;
 			new_page->file.size = p_unit->page->file.size;
 		}

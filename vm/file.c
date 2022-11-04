@@ -30,20 +30,36 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
+	file_page->written_back = false;
 	return true;
 }
 
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *cur = &page->file;
+	
+	file_read_at (cur->file, kva, cur->size, cur->offset);
+	cur->written_back = false;
+
 	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *cur = &page->file;
+
+	uint64_t *pte = pml4e_walk (page->unit->owner->pml4, page->va, false);
+
+	if (pte != NULL) {
+		if (*pte & PTE_D) {
+			file_write_at (cur->file, page->frame->kva, cur->size, cur->offset);
+			*pte = *pte & (~PTE_D);
+			cur->written_back = true;
+		}
+	}
+
 	return true;
 }
 
@@ -70,12 +86,14 @@ do_mmap (void *addr, size_t length, int writable,
 	void *upage = addr;
 	struct page *first = NULL;
 
+	struct file *mmap_file = file_duplicate (file);
+
 	int prev_pagecnt = 0;
 	while (read_bytes > 0) {
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 
 		long long int *aux = (long long int*) malloc (sizeof(long long int) * 3);
-		aux[0] = (long long int) file_duplicate (file);
+		aux[0] = (long long int) mmap_file;
 		aux[1] = (long long int) offset + (PGSIZE * prev_pagecnt);
 		aux[2] = (long long int) page_read_bytes;
 
@@ -104,7 +122,7 @@ void
 do_munmap (void *addr) {
 	struct thread *cur = thread_current ();
 	struct page *upage = spt_find_page (&cur->spt, addr);
-	struct file *file;
+	struct file *mmap_file;
 	int pgcnt;
 
 	if (upage == NULL) return;
@@ -114,6 +132,8 @@ do_munmap (void *addr) {
 	}
 
 	pgcnt = upage->unit->mmap_count;
+	if (upage->operations ->type == VM_UNINIT) mmap_file = ((long long int *)(upage->uninit.aux))[0];
+	else mmap_file = upage->file.file;
 	
 	for (int i = 0; i < pgcnt; i++) {
 		ASSERT (upage != NULL);
@@ -121,21 +141,20 @@ do_munmap (void *addr) {
 		if (upage->operations->type == VM_UNINIT) {
 			// printf("type of uninit.\n");
 			struct spt_unit *unit = upage->unit;
-			long long int *aux_ = upage->uninit.aux; 
-			file_close (aux_[0]);
 			vm_dealloc_page (upage);
 			list_remove (&unit->elem_spt);
 			free (unit);
 		}
 		else if (upage->operations->type == VM_FILE) {
 			// printf("type of file.\n");
-			uint64_t *pte = pml4e_walk (cur->pml4, upage->va, false);
-			if (pte != NULL) {
-				if (*pte & PTE_D) {
-					file_write_at (upage->file.file, upage->frame->kva, upage->file.size, upage->file.offset);
+			if (upage->file.written_back == false){
+				uint64_t *pte = pml4e_walk (cur->pml4, upage->va, false);
+				if (pte != NULL) {
+					if (*pte & PTE_D) {
+						file_write_at (upage->file.file, upage->frame->kva, upage->file.size, upage->file.offset);
+					}
 				}
 			}
-			file_close (upage->file.file);
 			pml4_clear_page (&cur->pml4, upage->va);
 			struct spt_unit *unit = upage->unit;
 			list_remove (&unit->elem_spt);
@@ -146,6 +165,8 @@ do_munmap (void *addr) {
 		addr += PGSIZE;
 		upage = spt_find_page (&cur->spt, addr);
 	}
+
+	file_close (mmap_file);
 }
 
 static bool
@@ -154,17 +175,14 @@ lazy_load_file (struct page *page, void *aux) {
 	struct file *file = aux_[0];
 	off_t ofs = aux_[1];
 	uint32_t page_read_bytes = aux_[2];
-
-	off_t old_pos = file_tell (file);
-	file_seek (file, ofs);
-	off_t actual_read = file_read (file, page->frame->kva, page_read_bytes);
+	
+	off_t actual_read = file_read_at(file, page->frame->kva, page_read_bytes, ofs);
 	
 	memset (page->frame->kva + actual_read, 0, PGSIZE - actual_read);
 	page->file.file = file;
 	page->file.offset = ofs;
 	page->file.size = actual_read;
 	free (aux);
-	file_seek (file, old_pos);
 
 	return true;
 }

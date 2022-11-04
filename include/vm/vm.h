@@ -104,6 +104,7 @@ struct spt_unit {
 	bool is_stack;
 	bool writable;
 	uint64_t mmap_mark;
+	struct file* lz_load;
 	int mmap_count;
 	struct thread *owner;
 
