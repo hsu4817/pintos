@@ -54,12 +54,13 @@ file_backed_swap_out (struct page *page) {
 
 	if (pte != NULL) {
 		if (*pte & PTE_D) {
+			file_lock_aquire ();
 			file_write_at (cur->file, page->frame->kva, cur->size, cur->offset);
+			file_lock_release ();
 			*pte = *pte & (~PTE_D);
 			cur->written_back = true;
 		}
 	}
-
 	return true;
 }
 
@@ -183,6 +184,5 @@ lazy_load_file (struct page *page, void *aux) {
 	page->file.offset = ofs;
 	page->file.size = actual_read;
 	free (aux);
-
 	return true;
 }
