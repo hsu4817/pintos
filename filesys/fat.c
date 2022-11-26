@@ -190,6 +190,14 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+	cluster_t nxt = clst;
+
+	while (clst != ~0) {
+		nxt = fat_fs->fat[clst];
+		fat_fs->fat[clst] = 0;
+		clst = nxt;
+	}
+
 	if (pclst > 0) {
 		fat_fs->fat[pclst] = ~0;
 	}
@@ -213,7 +221,12 @@ fat_get (cluster_t clst) {
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	fat_fs->data_start + fat_fs->fat[clst] - 1;
+	return fat_fs->data_start + fat_fs->fat[clst] - 1;
+}
+
+cluster_t
+sector_to_cluster (disk_sector_t sector) {
+	return sector + 1 - fat_fs->data_start;
 }
 
 
