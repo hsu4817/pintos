@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "fat.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -30,6 +31,7 @@ bytes_to_sectors (off_t size) {
 struct inode {
 	struct list_elem elem;              /* Element in inode list. */
 	disk_sector_t sector;               /* Sector number of disk location. */
+	cluster_t cluster;					/* Cluster number of sector. */
 	int open_cnt;                       /* Number of openers. */
 	bool removed;                       /* True if deleted, false otherwise. */
 	int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
@@ -43,8 +45,14 @@ struct inode {
 static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
-	if (pos < inode->data.length)
+	if (pos < inode->data.length) {
+		size_t sectors_left;
+		for (sectors_left = bytes_to_sectors (pos); sectors_left != 0; sectors_left--) {
+			
+		}
+
 		return inode->data.start + pos / DISK_SECTOR_SIZE;
+	}
 	else
 		return -1;
 }
