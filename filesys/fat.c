@@ -155,6 +155,7 @@ fat_fs_init (void) {
 	/* TODO: Your code goes here. */
 	fat_fs->fat_length = fat_fs->bs.fat_sectors;
 	fat_fs->data_start = fat_fs->bs.fat_start;
+	fat_fs->last_clst = fat_fs->fat_length-1;
 
 	
 }
@@ -169,18 +170,18 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	cluster_t new_cluster;
-	for (unsigned int i = 1; i < fat_fs->fat_length; i++) {
-		if (fat_fs->fat[i] == 0) {
-			new_cluster = i;
-			break;
+	cluster_t new_cluster = 0;
+	for (unsigned int i = 0; i < fat_fs->last_clst; i++) {
+		unsigned int idx = (clst + i) % (fat_fs->last_clst) + 1;
+		if (fat_fs->fat[idx] == 0) {
+			new_cluster = idx;
+			if (clst != 0) {
+				fat_fs->fat[clst] = new_cluster;
+			}
+			fat_fs->fat[new_cluster] = ~0;
+			return new_cluster;
 		}
 	}
-	if (clst != 0) {
-		fat_fs->fat[clst] = new_cluster;
-	}
-
-	fat_fs->fat[new_cluster] = ~0;
 	return new_cluster;
 }
 
@@ -214,3 +215,5 @@ cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
 	fat_fs->data_start + fat_fs->fat[clst] - 1;
 }
+
+
