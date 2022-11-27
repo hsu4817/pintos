@@ -6,6 +6,7 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "filesys/file.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir {
@@ -18,14 +19,13 @@ struct dir_entry {
 	disk_sector_t inode_sector;         /* Sector number of header. */
 	char name[NAME_MAX + 1];            /* Null terminated file name. */
 	bool in_use;                        /* In use or free? */
-	bool is_file;						/* Is entry file? */
 };
 
 /* Creates a directory with space for ENTRY_CNT entries in the
  * given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) {
-	return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+	return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -71,29 +71,6 @@ dir_close (struct dir *dir) {
 struct inode *
 dir_get_inode (struct dir *dir) {
 	return dir->inode;
-}
-
-void *
-dir_open_file (const struct dir *dir, const char *name, bool *is_file) {
-	struct dir_entry e;
-	struct inode* inode = NULL;
-
-	ASSERT (dir != NULL);
-	ASSERT (name != NULL);
-
-	if (lookup (dir, name, &e, NULL)) {
-		inode = inode_open (e.inode_sector);
-		if (e.is_file) {
-			*is_file = true;
-			return (void *) file_open (inode);
-		}
-		else {
-			*is_file = false;
-			return (void *) dir_open (inode);
-		}
-	}
-	else
-		return NULL;
 }
 
 /* Searches DIR for a file with the given NAME.
@@ -149,7 +126,7 @@ dir_lookup (const struct dir *dir, const char *name,
  * Fails if NAME is invalid (i.e. too long) or a disk or memory
  * error occurs. */
 bool
-dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector, bool is_file) {
+dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	struct dir_entry e;
 	off_t ofs;
 	bool success = false;
@@ -181,7 +158,6 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector, bool is_
 	e.in_use = true;
 	strlcpy (e.name, name, sizeof e.name);
 	e.inode_sector = inode_sector;
-	e.is_file = is_file;
 	success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
 done:
@@ -253,4 +229,85 @@ dir_sysreaddir(struct dir *dir, size_t size, char *name){
 		}
 	}
 	return false;
+}
+
+/* Walk through dir TARGET. Stores parent directory of target to PDIR, 
+ * and stores inode of target to INODE if EXIST is true. */
+bool
+dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *file_name, bool exist) {
+	char *path = malloc (strlen(target)+1);
+	strlcpy (path, target, strlen(target)+1);
+
+	char *token, *saveptr;
+	struct inode *next_inode = NULL;
+	struct dir *cur_dir = NULL;
+	int bytes_parsed = 0;
+	int size = strlen (target) + 1;
+	bool success = false;
+
+	token = strtok_r (path, "/", &saveptr);
+	if (token == "") {
+		cur_dir = dir_open_root ();
+	}
+	else {
+		cur_dir = dir_reopen (thread_current ()->curdir);
+	}
+	bytes_parsed += strlen (token) + 1;
+
+	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
+		bytes_parsed += strlen (token) + 1;
+		
+		if (bytes_parsed == size) {
+			dir_lookup (cur_dir, token, &next_inode);
+			if (exist && next_inode) {
+				success = true;
+			}
+			else if (!exist && !next_inode) {
+				success = true;
+			}
+			goto done;
+
+		}
+		else {
+			if (!dir_lookup (cur_dir, token, &next_inode)) {
+				goto done;
+			}
+		}
+
+		dir_close (cur_dir);
+		cur_dir = dir_open (next_inode);
+		if (cur_dir == NULL)
+			goto done;
+	}
+
+	done:
+		free (path);
+		if (inode) {
+			*inode = next_inode;
+		}
+		if (success) {
+			*pdir = cur_dir;
+			memcpy (file_name, token, 15);
+		}
+		else {
+			dir_close(cur_dir);
+		}
+		return success;
+}
+
+/* Check if DIR is empty. (has only "." and "..") */
+bool
+dir_is_empty (struct dir *dir) {
+	struct dir_entry e;
+	size_t ofs;
+	int cnt;
+
+	for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+			ofs += sizeof e) {
+		if (e.in_use) {
+			if (strcmp (e.name, ".") || strcmp (e.name, ".."))
+				return false;
+		}
+	}
+	return true;
 }

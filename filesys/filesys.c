@@ -75,8 +75,8 @@ filesys_create (const char *name, off_t initial_size) {
 	inode_sector = cluster_to_sector (inode_cluster);
 	bool success = (dir != NULL
 			&& inode_cluster != 0
-			&& inode_create (inode_sector, initial_size)
-			&& dir_add (dir, name, inode_sector, false));
+			&& inode_create (inode_sector, initial_size, false)
+			&& dir_add (dir, name, inode_sector));
 	if (!success && inode_cluster != 0)
 		fat_remove_chain (inode_cluster, 0);
 	dir_close (dir);
@@ -113,7 +113,7 @@ filesys_open (const char *name) {
  * or if an internal memory allocation fails. */
 bool
 filesys_remove (const char *name) {
-	ASSERT (name[0] != "/");
+	ASSERT (memcmp (name, "/", 1));
 	struct dir *dir = thread_current ()->curdir;
 	if (dir == NULL) {
 		dir = dir_open_root ();
@@ -173,70 +173,57 @@ filesys_chdir (const char *dir){
 
 bool
 filesys_mkdir (const char *dir) {
-	char *name = malloc(strlen(dir) + 1);
-	strlcpy (name, dir, strlen(dir) + 1);
-
-	char *token, *saveptr;
-	struct inode *next_inode;
-	struct dir *cur_dir;
-	struct dir *next_dir;
-	int bytes_parsed = 0;
-	int size = strlen (dir);
+	struct dir *pdir = NULL;
+	struct dir *new_dir = NULL;
+	char dir_name[15];
 	cluster_t clst = 0;
 	bool success = false;
 
+	if (!dir_walk (dir, &pdir, NULL, dir_name, false))
+		goto done;
+	
+	clst = fat_create_chain (0);
+	if (clst == 0) 
+		goto done;
+	
+	disk_sector_t sector = cluster_to_sector (clst);
+	if (!dir_create (sector, 2))
+		goto done;
+	
+	if (!dir_add (pdir, dir_name, sector))
+		goto done;
 
-	token = strtok_r (name, "/", &saveptr);
-	if (token == "") {
-		cur_dir = dir_open_root ();
+	new_dir = dir_open (inode_open (sector));
+	if (new_dir == NULL)
+		goto done;
+
+	if (dir_add (new_dir, ".", sector) && dir_add (new_dir, "..", inode_get_inumber(dir_get_inode (pdir))))
+		success = true;
+done:
+	dir_close (pdir);
+	dir_close (new_dir);
+	return success;
+
+}
+
+int
+filesys_symlink (const char *target, const char *linkpath) {
+	struct dir *pdir = NULL;
+	struct inode *inode = NULL;
+	char file_name[15];
+
+	if (strcmp (target, "/")) {
+		dir_walk (target, &pdir, &inode, file_name, true);
 	}
 	else {
-		if (!dir_lookup (thread_current ()->curdir, token, &next_inode)) 
-			goto error;
-		cur_dir = dir_open (next_inode);
+		inode = inode_open (ROOT_DIR_SECTOR);
 	}
-	bytes_parsed += strlen (token) + 1;
+	if (inode == NULL)
+		return -1;
 
-	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
-		bytes_parsed += strlen (token) + 1;
-
-		if (!dir_lookup (cur_dir, token, &next_inode)) {
-			if (bytes_parsed != size){
-				goto error;
-			}
-			else {
-				clst = fat_create_chain(0);
-				disk_sector_t dir_sector;
-				if (clst == 0) goto error;
-				else dir_sector = cluster_to_sector (dir_sector);
-				
-				if ((strlen(token) <= 14) &&
-					dir_create (dir_sector, 2) &&
-					dir_add (cur_dir, token, dir_sector, true)) {
-					struct dir *new_dir = dir_open (dir_sector);
-
-					if (dir_add (new_dir, ".", dir_sector, true) &&
-						dir_add (new_dir, "..", next_inode, true)) {
-						success = true;
-					}
-					else
-						goto error;
-				}
-				else 
-					goto error;
-			}
-		}
-		dir_close (cur_dir);
-		cur_dir = dir_open (next_inode);
-		if (cur_dir == NULL)
-			goto error;
+	if (!dir_add (dir_reopen (thread_current ()->curdir), linkpath, inode_get_inumber (inode))){
+		return -1;
 	}
-
-	error:
-		free (name);
-		if (clst != 0) fat_remove_chain (clst, 0);
-		success = false;
-		return success;
 }
 
 /* Formats the file system. */

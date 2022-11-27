@@ -31,7 +31,7 @@
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-struct file* get_file_with_fd (int fd);
+struct fdesc* get_fdesc_with_fd (int fd);
 void update_dup (struct file*);
 static bool ptr_is_writable (void *addr); 
 
@@ -167,7 +167,9 @@ bool mkdir (const char *dir){
 bool readdir (int fd, char *name){
 	if(isdir(fd) == 0) return false;
 
-	struct dir *curr_dir = get_file_with_fd(fd);
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (!fdesc->is_dir) return false;
+	struct dir *curr_dir = fdesc->file;
 
 	file_lock_aquire ();
 	bool success = dir_sysreaddir(curr_dir, 15, name);
@@ -189,13 +191,15 @@ bool isdir (int fd){
 }
 
 int inumber (int fd){
-	if (isdir(fd)) {
-		struct file *file = get_file_with_fd (fd);
-		return inode_get_inumber (file_get_inode (file));
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL)
+		return -1;
+
+	if (!fdesc->is_dir) {
+		return inode_get_inumber (file_get_inode (fdesc->file));
 	}
 	else {
-		struct dir *dir = get_file_with_fd (fd);
-		return inode_get_inumber (dir_get_inode (dir));
+		return inode_get_inumber (dir_get_inode (fdesc->file));
 	}
 }
 
@@ -266,12 +270,26 @@ bool remove (const char *file) {
 	if (*file == '\0') return false;
 
 	file_lock_aquire ();
-	bool remove_bool;
+	bool success = false;
+	struct dir *dir;
+	struct inode *inode;
+	char file_name[15];
 
 	intr_enable ();
-	remove_bool =  filesys_remove (file);
+	if (dir_walk (file, &dir, &inode, file_name, true)) {
+		if (inode_is_dir (inode)) {
+			if (dir_is_empty (dir_open (inode))) {
+				dir_close (inode);
+				success = dir_remove (dir, file_name);
+			}
+		}
+		else {
+			success = filesys_remove (file);
+		}
+	}
+	
 	file_lock_release ();
-	return remove_bool;
+	return success;
 }
 
 
@@ -290,7 +308,16 @@ int open (const char *file) {
 	intr_enable ();
 
 	void *fp = dir_open_file (curr->curdir, file, &is_file);
+
+	struct inode *inode = NULL;
+	if (!dir_lookup (curr->curdir, file, &inode))
+		inode_close (inode);
 	
+	if (inode_is_dir (inode))
+		fp = dir_open (inode);
+	else 
+		fp = file_open (inode);
+
 	file_lock_release ();
 
 	if (fp == NULL) {
@@ -300,19 +327,19 @@ int open (const char *file) {
 
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
 	fd->file = fp;
-	fd->is_dir = is_file ? false : true;
+	fd->is_dir = inode_is_dir (inode);
 	list_push_back (&curr->desc_table, &fd->elem);
 	
 	return fd->desc_no;
 }
 
-struct file*
-get_file_with_fd (int fd){
+static struct fdesc*
+get_fdesc_with_fd (int fd){
 	struct thread *curr = thread_current ();
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
 		if (list_entry (i, struct fdesc, elem)->desc_no == fd) {
-			return list_entry (i, struct fdesc, elem)->file;
+			return list_entry (i, struct fdesc, elem);
 		}
 	}
 	return NULL;
@@ -322,15 +349,17 @@ get_file_with_fd (int fd){
 int filesize (int fd) {
 	intr_enable ();
 
-	struct file* file = get_file_with_fd (fd);
-	if (file == NULL) return -1;
-	if (file == 1 || file == 2) return;
-	return (int) file_length (file);
+	struct fdesc* fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL) return -1;
+	if (fdesc->file == 1 || fdesc->file == 2) return;
+	return (int) file_length (fdesc->file);
 }
 
 int read (int fd, void *buffer, unsigned size) {
-	struct file* file = get_file_with_fd (fd);
-	if (file == NULL) return -1;
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL) return -1;
+	if (fdesc->is_dir) return -1;
+	struct file* file = fdesc->file;
 	if (file == 1) return input_getc();
 	if (file == 2) return -1;
 
@@ -350,8 +379,11 @@ int read (int fd, void *buffer, unsigned size) {
 
 int 
 write (int fd, const void *buffer, unsigned length) {
-	struct file* file = get_file_with_fd (fd);
-	if (file == NULL) return -1;
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL) return -1;
+	if (fdesc->is_dir) return -1;
+	struct file* file = fdesc->file;
+	
 	if(file == 1) return -1;
 	if (file == 2) {
 		file_lock_aquire ();
@@ -372,8 +404,10 @@ write (int fd, const void *buffer, unsigned length) {
 
 void
 seek (int fd, unsigned position) {
-	struct file* file = get_file_with_fd (fd);
-	if (file == NULL) return;
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL) return;
+	if (fdesc->is_dir) return;
+	struct file* file = fdesc->file;
 	if (file == 1 || file == 2) return;
 
 	file_lock_aquire ();
@@ -385,8 +419,10 @@ seek (int fd, unsigned position) {
 }
 
 unsigned tell (int fd) {
-	struct file* file = get_file_with_fd (fd);
-	if (file == NULL) return -1;
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL) return -1;
+	if (fdesc->is_dir) return -1;
+	struct file* file = fdesc->file;
 	if (file == 1 || file == 2) return -1;
 
 	file_lock_aquire ();
@@ -396,28 +432,20 @@ unsigned tell (int fd) {
 }
 
 void close (int fd) {
-	struct fdesc *fd_ = NULL;
-	struct thread *curr = thread_current ();
-	struct list_elem *i;
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL) return -1;
 
-	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
-		if (list_entry (i, struct fdesc, elem)->desc_no == fd) {
-			fd_ = list_entry (i, struct fdesc, elem);
-			break;
-		}
-	}
-
-	if (i == list_end (&curr->desc_table)) {
-		return;
+	file_lock_aquire ();
+	list_remove (&fdesc->elem);
+	intr_enable ();
+	if (fdesc->is_dir) {
+		dir_close (fdesc->file);
 	}
 	else {
-		list_remove (&fd_->elem);
-		file_lock_aquire ();
-		intr_enable ();
-		if (fd_->file > 2) file_close (fd_->file);
-		file_lock_release ();
-		free (fd_);		
+		if (fdesc->file > 2) file_close (fdesc->file);	
 	}
+	file_lock_release ();
+	free (fdesc);
 }
 
 int dup2 (int oldfd, int newfd) {
@@ -513,8 +541,10 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 	}
 
 	//fd validity check.
-	file = get_file_with_fd (fd);
-	if (file == NULL) return NULL;
+	struct fdesc *fdesc = get_fdesc_with_fd (fd);
+	if (fdesc == NULL) return NULL;
+	if (fdesc->is_dir) return NULL;
+	struct file* file = fdesc->file;
 	if (file == 1 || file == 2) return NULL;
 
 	//offset validity check.
