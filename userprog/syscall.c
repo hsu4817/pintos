@@ -26,6 +26,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "lib/user/syscall.h"
 
 
 
@@ -149,7 +150,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 }
 
 bool chdir (const char *dir){
-
+	return filesys_chdir(dir);
 }
 
 bool mkdir (const char *dir){
@@ -161,7 +162,11 @@ bool mkdir (const char *dir){
 }
 
 bool readdir (int fd, char *name){
+	if(isdir(fd) == 0) return false;
 
+	struct dir *curr_dir = get_file_with_fd(fd);
+
+	return dir_sysreaddir(curr_dir, READDIR_MAX_LEN+1, name);
 }
 
 bool isdir (int fd){

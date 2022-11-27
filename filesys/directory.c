@@ -214,3 +214,17 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 	}
 	return false;
 }
+
+bool
+dir_sysreaddir(struct dir *dir, size_t size, char *name){
+	struct dir_entry e;
+	size_t ofs;
+
+	for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e; ofs += sizeof e){
+		if((strcmp(e.name, ".") != 0) && (strcmp(e.name, "..") != 0)){
+			strlcpy(name, e.name, size);
+			return true;
+		}
+	}
+	return false;
+}

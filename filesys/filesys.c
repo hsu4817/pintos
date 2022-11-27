@@ -109,6 +109,53 @@ filesys_remove (const char *name) {
 }
 
 bool
+filesys_chdir (const char *dir){
+	char *_dir = malloc((strlen(dir)+1));
+	strlcpy (_dir, dir, strlen(dir)+1);
+
+	char *token, *save_ptr;
+	bool success = true;
+
+	struct dir *curr;
+	struct inode *curr_inode;
+
+	token = strtok_r (_dir, "/", &save_ptr);
+
+	if(strcmp(token, ".") == 0){
+		curr = thread_current()->curdir;
+	}
+	else if(strcmp(token, "..") == 0){
+		curr = thread_current()->curdir;
+
+		success = dir_lookup(curr, token, curr_inode);
+		curr = dir_open(curr_inode);
+
+		if(success == false){
+			free(_dir);
+			return success;
+		}
+		
+	}
+	else{
+		curr = dir_open_root();
+	}
+
+	for (; token != NULL; token = strtok_r (NULL, "/", &save_ptr)){
+
+		success = dir_lookup(curr, token, curr_inode);
+		curr = dir_open(curr_inode);
+
+		if(success == false){
+			free(_dir);
+			return success;
+		}
+	}
+	
+	free(_dir);
+	return success;
+}
+
+bool
 filesys_mkdir (const char *dir) {
 	char *name = malloc(strlen(dir) + 1);
 	strlcpy (name, dir, strlen(dir) + 1);
