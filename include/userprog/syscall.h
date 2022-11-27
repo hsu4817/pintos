@@ -8,6 +8,13 @@
 
 void syscall_init (void);
 
+bool chdir (const char *dir);
+bool mkdir (const char *dir);
+bool readdir (int fd, char *name);
+bool isdir (int fd);
+int inumber (int fd);
+int symlink (const char *target, const char *linkpath);
+
 void halt (void);
 void exit (int status);
 tid_t fork (const char *thread_name, struct intr_frame *if_);

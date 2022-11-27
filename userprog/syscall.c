@@ -121,11 +121,53 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_MUNMAP:
 			munmap (f->R.rdi);
 			break;
+		case SYS_CHDIR:
+			f->R.rax = chdir (f->R.rdi);
+			break;
+		case SYS_MKDIR:
+			f->R.rax = mkdir (f->R.rdi);
+			break;
+		case SYS_READDIR:
+			f->R.rax = readdir (f->R.rdi, f->R.rsi);
+			break;
+		case SYS_ISDIR:
+			f->R.rax = isdir (f->R.rdi);
+			break;
+		case SYS_INUMBER:
+			f->R.rax = inumber (f->R.rdi);
+			break;
+		case SYS_SYMLINK:
+			f->R.rax = symlink (f->R.rdi, f->R.rsi);
+			break;
 		default:
 			printf ("Unknown syscall number %d.\n", syscall_no);
 			thread_exit ();
 	}
 	intr_set_level (old_level);
+}
+
+static bool chdir (const char *dir){
+
+}
+
+static bool mkdir (const char *dir){
+
+}
+
+static bool readdir (int fd, char *name){
+
+}
+
+static bool isdir (int fd){
+
+}
+
+static int inumber (int fd){
+
+}
+
+static int symlink (const char *target, const char *linkpath){
+	
 }
 
 static bool ptr_is_writable (void *addr) {
