@@ -8,6 +8,7 @@
 #include "filesys/directory.h"
 #include "devices/disk.h"
 #include "filesys/fat.h"
+#include "threads/thread.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -103,6 +104,53 @@ filesys_remove (const char *name) {
 	bool success = dir != NULL && dir_remove (dir, name);
 	dir_close (dir);
 
+	return success;
+}
+
+bool
+filesys_chdir (const char *dir){
+	char *_dir = malloc((strlen(dir)+1));
+	strlcpy (_dir, dir, strlen(dir)+1);
+
+	char *token, *save_ptr;
+	bool success = true;
+
+	struct dir *curr;
+	struct inode *curr_inode;
+
+	token = strtok_r (_dir, "/", &save_ptr);
+
+	if(strcmp(token, ".") == 0){
+		curr = thread_current()->curdir;
+	}
+	else if(strcmp(token, "..") == 0){
+		curr = thread_current()->curdir;
+
+		success = dir_lookup(curr, token, curr_inode);
+		curr = dir_open(curr_inode);
+
+		if(success == false){
+			free(_dir);
+			return success;
+		}
+		
+	}
+	else{
+		curr = dir_open_root();
+	}
+
+	for (; token != NULL; token = strtok_r (NULL, "/", &save_ptr)){
+
+		success = dir_lookup(curr, token, curr_inode);
+		curr = dir_open(curr_inode);
+
+		if(success == false){
+			free(_dir);
+			return success;
+		}
+	}
+	
+	free(_dir);
 	return success;
 }
 
