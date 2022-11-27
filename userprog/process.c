@@ -109,6 +109,8 @@ initd (void *f_name) {
 	list_push_back (&thread_current ()->desc_table, &stdinput->elem);
 	list_push_back (&thread_current ()->desc_table, &stdoutput->elem);
 
+	if (thread_current()->curdir = dir_open_root () == NULL) PANIC("Fail to open root directory.");
+
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd while exec.\n");
 	NOT_REACHED ();
@@ -237,6 +239,7 @@ __do_fork (void *aux[]) {
 	file_lock_aquire ();
 	current->parent = parent;
 	current->excutable = file_duplicate (parent->excutable);
+	current->curdir = dir_reopen (parent->curdir);
 	file_lock_release ();
 
 	if (!process_init ()){

@@ -11,19 +11,21 @@
 #include "threads/init.h"
 #include <list.h>
 
-#include "filesys/file.h"
-#include "filesys/filesys.h"
+
+#include "devices/input.h"
+#include "devices/timer.h"
+#include "lib/string.h"
+#include "lib/kernel/stdio.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"
-#include "userprog/process.h"
-#include "lib/string.h"
-#include "devices/input.h"
 #include "threads/synch.h"
-#include "lib/kernel/stdio.h"
-#include "devices/timer.h"
-#include "filesys/inode.h"
+#include "userprog/process.h"
 #include "vm/file.h"
 #include "vm/vm.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
 
 
 
@@ -151,7 +153,11 @@ bool chdir (const char *dir){
 }
 
 bool mkdir (const char *dir){
-
+	bool success = false;
+	file_lock_aquire ();
+	success = filesys_mkdir(dir);
+	file_lock_release ();
+	return success;
 }
 
 bool readdir (int fd, char *name){

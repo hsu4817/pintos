@@ -9,6 +9,7 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#include "filesys/directory.h"
 
 
 /* States in a thread's life cycle. */
@@ -112,9 +113,13 @@ struct thread {
 	bool is_kernel;						/* True when the thread is kernel thread. */
 	bool someone_is_waiting;			/* Parent called wait. */
 	struct thread *pwaiter;				/* Pwaiter process. */
-	bool fork_success;					/*fork success 1, fail 0*/
-	struct semaphore fork_sema;			/*fork semaphore*/
+	bool fork_success;					/* Fork success 1, fail 0*/
+	struct semaphore fork_sema;			/* Fork semaphore*/
 	struct file *excutable;				/* Exucutable of current process. */
+
+	/* Use for project 4. */
+	struct dir *curdir;					/* Current directory. */			
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

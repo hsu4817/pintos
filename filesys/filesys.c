@@ -8,6 +8,8 @@
 #include "filesys/directory.h"
 #include "devices/disk.h"
 #include "filesys/fat.h"
+#include "threads/thread.h"
+#include "lib/string.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -104,6 +106,74 @@ filesys_remove (const char *name) {
 	dir_close (dir);
 
 	return success;
+}
+
+bool
+filesys_mkdir (const char *dir) {
+	char *name = malloc(strlen(dir) + 1);
+	strlcpy (name, dir, strlen(dir) + 1);
+
+	char *token, *saveptr;
+	struct inode *next_inode;
+	struct dir *cur_dir;
+	struct dir *next_dir;
+	int bytes_parsed = 0;
+	int size = strlen (dir);
+	cluster_t clst = 0;
+	bool success = false;
+
+
+	token = strtok_r (name, "/", &saveptr);
+	if (token == "") {
+		cur_dir = dir_open_root ();
+	}
+	else {
+		if (!dir_lookup (thread_current ()->curdir, token, &next_inode)) 
+			goto error;
+		cur_dir = dir_open (next_inode);
+	}
+	bytes_parsed += strlen (token) + 1;
+
+	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
+		bytes_parsed += strlen (token) + 1;
+
+		if (!dir_lookup (cur_dir, token, &next_inode)) {
+			if (bytes_parsed != size){
+				goto error;
+			}
+			else {
+				clst = fat_create_chain(0);
+				disk_sector_t dir_sector;
+				if (clst == 0) goto error;
+				else dir_sector = cluster_to_sector (dir_sector);
+				
+				if ((strlen(token) <= 14) &&
+					dir_create (dir_sector, 2) &&
+					dir_add (cur_dir, token, dir_sector)) {
+					struct dir *new_dir = dir_open (dir_sector);
+
+					if (dir_add (new_dir, ".", dir_sector) &&
+						dir_add (new_dir, "..", next_inode)) {
+						success = true;
+					}
+					else
+						goto error;
+				}
+				else 
+					goto error;
+			}
+		}
+		dir_close (cur_dir);
+		cur_dir = dir_open (next_inode);
+		if (cur_dir == NULL)
+			goto error;
+	}
+
+	error:
+		free (name);
+		if (clst != 0) fat_remove_chain (clst, 0);
+		success = false;
+		return success;
 }
 
 /* Formats the file system. */
