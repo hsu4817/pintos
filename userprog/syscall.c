@@ -149,7 +149,11 @@ syscall_handler (struct intr_frame *f UNUSED) {
 }
 
 bool chdir (const char *dir){
-	return filesys_chdir(dir);
+	bool success = false;
+	file_lock_aquire ();
+	success = filesys_chdir(dir);
+	file_lock_release ();
+	return success;
 }
 
 bool mkdir (const char *dir){
@@ -165,15 +169,34 @@ bool readdir (int fd, char *name){
 
 	struct dir *curr_dir = get_file_with_fd(fd);
 
-	return dir_sysreaddir(curr_dir, 15, name);
+	file_lock_aquire ();
+	bool success = dir_sysreaddir(curr_dir, 15, name);
+	file_lock_release ();
+	return success;
 }
 
 bool isdir (int fd){
+	struct thread *cur = thread_current ();
+	struct list_elem *f;
 
+	for (f = list_begin (&cur->desc_table); f != list_end (&cur->desc_table); f = list_next (f)) {
+		if (list_entry (f, struct fdesc, elem)->desc_no == fd) {
+			if (list_entry (f, struct fdesc, elem)->is_dir) return true;
+			else return false;
+		}
+	}
+	return false;
 }
 
 int inumber (int fd){
-
+	if (isdir(fd)) {
+		struct file *file = get_file_with_fd (fd);
+		return inode_get_inumber (file_get_inode (file));
+	}
+	else {
+		struct dir *dir = get_file_with_fd (fd);
+		return inode_get_inumber (dir_get_inode (dir));
+	}
 }
 
 int symlink (const char *target, const char *linkpath){
@@ -253,9 +276,9 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
-	struct file *FD;
 	struct fdesc *fd;
 	struct thread *curr = thread_current ();
+	bool is_file;
 
 	if (file == NULL) exit(-1);
 	if (*file == '\0') return -1;
@@ -264,17 +287,20 @@ int open (const char *file) {
 	if (fd == NULL) return -1;
 
 	file_lock_aquire ();
-
 	intr_enable ();
-	FD = filesys_open (file);
+
+	void *fp = dir_open_file (curr->curdir, file, &is_file);
+	
 	file_lock_release ();
-	if (FD == NULL) {
-		free (fd);
+
+	if (fp == NULL) {
+		free(fd);
 		return -1;
 	}
 
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
-	fd->file = FD;
+	fd->file = fp;
+	fd->is_dir = is_file ? false : true;
 	list_push_back (&curr->desc_table, &fd->elem);
 	
 	return fd->desc_no;

@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "filesys/file.h"
 
 /* A directory. */
 struct dir {
@@ -17,6 +18,7 @@ struct dir_entry {
 	disk_sector_t inode_sector;         /* Sector number of header. */
 	char name[NAME_MAX + 1];            /* Null terminated file name. */
 	bool in_use;                        /* In use or free? */
+	bool is_file;						/* Is entry file? */
 };
 
 /* Creates a directory with space for ENTRY_CNT entries in the
@@ -69,6 +71,29 @@ dir_close (struct dir *dir) {
 struct inode *
 dir_get_inode (struct dir *dir) {
 	return dir->inode;
+}
+
+void *
+dir_open_file (const struct dir *dir, const char *name, bool *is_file) {
+	struct dir_entry e;
+	struct inode* inode = NULL;
+
+	ASSERT (dir != NULL);
+	ASSERT (name != NULL);
+
+	if (lookup (dir, name, &e, NULL)) {
+		inode = inode_open (e.inode_sector);
+		if (e.is_file) {
+			*is_file = true;
+			return (void *) file_open (inode);
+		}
+		else {
+			*is_file = false;
+			return (void *) dir_open (inode);
+		}
+	}
+	else
+		return NULL;
 }
 
 /* Searches DIR for a file with the given NAME.
@@ -124,7 +149,7 @@ dir_lookup (const struct dir *dir, const char *name,
  * Fails if NAME is invalid (i.e. too long) or a disk or memory
  * error occurs. */
 bool
-dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
+dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector, bool is_file) {
 	struct dir_entry e;
 	off_t ofs;
 	bool success = false;
@@ -156,6 +181,7 @@ dir_add (struct dir *dir, const char *name, disk_sector_t inode_sector) {
 	e.in_use = true;
 	strlcpy (e.name, name, sizeof e.name);
 	e.inode_sector = inode_sector;
+	e.is_file = is_file;
 	success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
 done:

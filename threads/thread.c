@@ -715,6 +715,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->someone_is_waiting = false;
 	t->fork_success = false;
 	sema_init(&t->fork_sema, 0);
+	t->curdir = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

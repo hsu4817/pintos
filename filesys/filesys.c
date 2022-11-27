@@ -64,13 +64,19 @@ bool
 filesys_create (const char *name, off_t initial_size) {
 	disk_sector_t inode_sector = 0;
 	cluster_t inode_cluster = 0;
-	struct dir *dir = dir_open_root ();
+
+	ASSERT (name[0] != "/");
+	struct dir *dir = thread_current ()->curdir;
+	if (dir == NULL) {
+		dir = dir_open_root ();
+	}	
+
 	inode_cluster = fat_create_chain (0);
 	inode_sector = cluster_to_sector (inode_cluster);
 	bool success = (dir != NULL
 			&& inode_cluster != 0
 			&& inode_create (inode_sector, initial_size)
-			&& dir_add (dir, name, inode_sector));
+			&& dir_add (dir, name, inode_sector, false));
 	if (!success && inode_cluster != 0)
 		fat_remove_chain (inode_cluster, 0);
 	dir_close (dir);
@@ -85,8 +91,14 @@ filesys_create (const char *name, off_t initial_size) {
  * or if an internal memory allocation fails. */
 struct file *
 filesys_open (const char *name) {
-	struct dir *dir = dir_open_root ();
+	struct dir *dir;
 	struct inode *inode = NULL;
+
+	ASSERT (name[0] != "/");
+	struct dir *dir = thread_current ()->curdir;
+	if (dir == NULL) {
+		dir = dir_open_root ();
+	}	
 
 	if (dir != NULL)
 		dir_lookup (dir, name, &inode);
@@ -101,7 +113,11 @@ filesys_open (const char *name) {
  * or if an internal memory allocation fails. */
 bool
 filesys_remove (const char *name) {
-	struct dir *dir = dir_open_root ();
+	ASSERT (name[0] != "/");
+	struct dir *dir = thread_current ()->curdir;
+	if (dir == NULL) {
+		dir = dir_open_root ();
+	}	
 	bool success = dir != NULL && dir_remove (dir, name);
 	dir_close (dir);
 
@@ -127,7 +143,7 @@ filesys_chdir (const char *dir){
 	else if(strcmp(token, "..") == 0){
 		curr = thread_current()->curdir;
 
-		success = dir_lookup(curr, token, curr_inode);
+		success = dir_lookup(curr, token, &curr_inode);
 		curr = dir_open(curr_inode);
 
 		if(success == false){
@@ -196,11 +212,11 @@ filesys_mkdir (const char *dir) {
 				
 				if ((strlen(token) <= 14) &&
 					dir_create (dir_sector, 2) &&
-					dir_add (cur_dir, token, dir_sector)) {
+					dir_add (cur_dir, token, dir_sector, true)) {
 					struct dir *new_dir = dir_open (dir_sector);
 
-					if (dir_add (new_dir, ".", dir_sector) &&
-						dir_add (new_dir, "..", next_inode)) {
+					if (dir_add (new_dir, ".", dir_sector, true) &&
+						dir_add (new_dir, "..", next_inode, true)) {
 						success = true;
 					}
 					else

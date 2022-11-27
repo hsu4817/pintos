@@ -103,8 +103,10 @@ initd (void *f_name) {
 
 	stdinput->desc_no = 0;
 	stdinput->file = 1;
+	stdinput->is_dir = false;
 	stdoutput->desc_no = 1;
 	stdoutput->file = 2;
+	stdoutput->is_dir = false;
 	
 	list_push_back (&thread_current ()->desc_table, &stdinput->elem);
 	list_push_back (&thread_current ()->desc_table, &stdoutput->elem);
@@ -256,17 +258,22 @@ __do_fork (void *aux[]) {
 			goto error;
 		}
 		dup_fd->desc_no = fd->desc_no;
-		if (fd->file > 2){
-			file_lock_aquire ();
-			dup_fd->file = file_duplicate (fd->file);
-			file_lock_release ();
-			if (dup_fd->file == NULL) {
-				free(dup_fd);
-				goto error;
-			}
+		dup_fd->is_dir = fd->is_dir;
+		if (fd->is_dir) {
+			dup_fd->file = dir_reopen (fd->file);
 		}
-		else dup_fd->file = fd->file;
-		
+		else {
+			if (fd->file > 2){
+				file_lock_aquire ();
+				dup_fd->file = file_duplicate (fd->file);
+				file_lock_release ();
+				if (dup_fd->file == NULL) {
+					free(dup_fd);
+					goto error;
+				}
+			}
+			else dup_fd->file = fd->file;
+		}
 		list_push_back (&current->desc_table, &dup_fd->elem);
 	}
 	
@@ -382,15 +389,20 @@ process_exit (void) {
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	file_close (curr->excutable);
-
+	/* Cleanup file desc table. */
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
 		struct list_elem *temp = i;
 		ASSERT (i != list_next (i));
 		i = list_next(i);
 		
-		if (list_entry (temp, struct fdesc, elem)->file > 2){
-			file_close (list_entry (temp, struct fdesc, elem)->file);
+		if (list_entry (temp, struct fdesc, elem)->is_dir) {
+			dir_close (list_entry (temp, struct fdesc, elem)->file);
+		}
+		else {
+			if (list_entry (temp, struct fdesc, elem)->file > 2){
+				file_close (list_entry (temp, struct fdesc, elem)->file);
+			}
 		}
 		list_remove (temp);
 		free (list_entry (temp, struct fdesc, elem));

@@ -141,6 +141,7 @@ struct thread {
 struct fdesc
 {
 	int desc_no;
+	bool is_dir;
 	struct file* file;
 	
 	struct list_elem elem;
