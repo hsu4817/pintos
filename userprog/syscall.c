@@ -146,27 +146,27 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	intr_set_level (old_level);
 }
 
-static bool chdir (const char *dir){
+bool chdir (const char *dir){
 
 }
 
-static bool mkdir (const char *dir){
+bool mkdir (const char *dir){
 
 }
 
-static bool readdir (int fd, char *name){
+bool readdir (int fd, char *name){
 
 }
 
-static bool isdir (int fd){
+bool isdir (int fd){
 
 }
 
-static int inumber (int fd){
+int inumber (int fd){
 
 }
 
-static int symlink (const char *target, const char *linkpath){
+int symlink (const char *target, const char *linkpath){
 	
 }
 
