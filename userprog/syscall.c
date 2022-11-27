@@ -26,7 +26,6 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
-#include "lib/user/syscall.h"
 
 
 
@@ -166,7 +165,7 @@ bool readdir (int fd, char *name){
 
 	struct dir *curr_dir = get_file_with_fd(fd);
 
-	return dir_sysreaddir(curr_dir, READDIR_MAX_LEN+1, name);
+	return dir_sysreaddir(curr_dir, 15, name);
 }
 
 bool isdir (int fd){
