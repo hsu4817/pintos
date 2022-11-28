@@ -175,7 +175,6 @@ vm_evict_frame (void) {
 	struct list_elem *i;
 	/* TODO: swap out the victim and return the evicted frame. */
 	if (victim == NULL) return NULL;
-	list_remove (&victim->elem_frame);
 		
 	for (i = list_begin (&victim->cow_layer->pages); i != list_end (&victim->cow_layer->pages); i = list_next(i)) {
 		struct page* vpage = list_entry(i, struct page, elem_cow);
