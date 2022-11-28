@@ -98,7 +98,7 @@ filesys_open (const char *name) {
 	struct inode *inode = NULL;
 
 	ASSERT (name[0] != "/");
-	struct dir *dir = thread_current ()->curdir;
+	dir = thread_current ()->curdir;
 	if (dir == NULL) {
 		dir = dir_open_root ();
 	}
@@ -221,15 +221,17 @@ filesys_symlink (const char *target, const char *linkpath) {
 	struct inode *inode = NULL;
 	char file_name[15];
 
-	if (strcmp (target, "/")) {
+	if (strcmp (target, "/")) 
 		dir_walk (target, &pdir, &inode, file_name, true);
-	}
-	else {
+	
+	else 
 		inode = inode_open (ROOT_DIR_SECTOR);
-	}
-	if (inode == NULL)
-		return -1;
 
+	if (inode == NULL) {
+		dir_close (pdir);
+		return -1;
+	}
+	
 	if (!dir_add (dir_reopen (thread_current ()->curdir), linkpath, inode_get_inumber (inode))){
 		return -1;
 	}

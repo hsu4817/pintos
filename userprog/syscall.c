@@ -115,31 +115,31 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			close ((int) f->R.rdi);
 			break;
 		case SYS_DUP2:
-			f->R.rax = dup2 (f->R.rdi, f->R.rsi);
+			f->R.rax = dup2 ((int) f->R.rdi, (int) f->R.rsi);
 			break;
 		case SYS_MMAP:
-			f->R.rax = mmap (f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+			f->R.rax = mmap ((void *) f->R.rdi, (size_t) f->R.rsi, (int) f->R.rdx, (int) f->R.r10, (off_t) f->R.r8);
 			break;
 		case SYS_MUNMAP:
-			munmap (f->R.rdi);
+			munmap ((void *) f->R.rdi);
 			break;
 		case SYS_CHDIR:
-			f->R.rax = chdir (f->R.rdi);
+			f->R.rax = chdir ((const char *) f->R.rdi);
 			break;
 		case SYS_MKDIR:
-			f->R.rax = mkdir (f->R.rdi);
+			f->R.rax = mkdir ((const char *) f->R.rdi);
 			break;
 		case SYS_READDIR:
-			f->R.rax = readdir (f->R.rdi, f->R.rsi);
+			f->R.rax = readdir ((int) f->R.rdi, (char *)f->R.rsi);
 			break;
 		case SYS_ISDIR:
-			f->R.rax = isdir (f->R.rdi);
+			f->R.rax = isdir ((int) f->R.rdi);
 			break;
 		case SYS_INUMBER:
-			f->R.rax = inumber (f->R.rdi);
+			f->R.rax = inumber ((int) f->R.rdi);
 			break;
 		case SYS_SYMLINK:
-			f->R.rax = symlink (f->R.rdi, f->R.rsi);
+			f->R.rax = symlink ((const char *) f->R.rdi, (const char *)f->R.rsi);
 			break;
 		default:
 			printf ("Unknown syscall number %d.\n", syscall_no);
@@ -204,7 +204,11 @@ int inumber (int fd){
 }
 
 int symlink (const char *target, const char *linkpath){
-	
+	int success;
+	file_lock_aquire ();
+	success = filesys_symlink (target, linkpath);
+	file_lock_release ();
+	return success;
 }
 
 static bool ptr_is_writable (void *addr) {
@@ -278,9 +282,12 @@ bool remove (const char *file) {
 	intr_enable ();
 	if (dir_walk (file, &dir, &inode, file_name, true)) {
 		if (inode_is_dir (inode)) {
-			if (dir_is_empty (dir_open (inode))) {
-				dir_close (inode);
-				success = dir_remove (dir, file_name);
+			struct dir *target_dir = dir_open (inode);
+			if (target_dir) {
+				if (dir_is_empty (target_dir)) {
+					dir_close (target_dir);
+					success = dir_remove (dir, file_name);
+				}
 			}
 		}
 		else {
@@ -352,7 +359,7 @@ int filesize (int fd) {
 
 	struct fdesc* fdesc = get_fdesc_with_fd (fd);
 	if (fdesc == NULL) return -1;
-	if (fdesc->file == 1 || fdesc->file == 2) return;
+	if ((uint64_t) fdesc->file == 1 || (uint64_t) fdesc->file == 2) return -1;
 	return (int) file_length (fdesc->file);
 }
 
@@ -361,8 +368,8 @@ int read (int fd, void *buffer, unsigned size) {
 	if (fdesc == NULL) return -1;
 	if (fdesc->is_dir) return -1;
 	struct file* file = fdesc->file;
-	if (file == 1) return input_getc();
-	if (file == 2) return -1;
+	if ((uint64_t) file == 1) return input_getc();
+	if ((uint64_t) file == 2) return -1;
 
 	if (!ptr_is_writable (buffer)) {
 		// printf("buffer is not writable.\n");
@@ -385,8 +392,8 @@ write (int fd, const void *buffer, unsigned length) {
 	if (fdesc->is_dir) return -1;
 	struct file* file = fdesc->file;
 	
-	if(file == 1) return -1;
-	if (file == 2) {
+	if((uint64_t) file == 1) return -1;
+	if ((uint64_t) file == 2) {
 		file_lock_aquire ();
 		putbuf (buffer, length);
 		file_lock_release ();
@@ -409,7 +416,7 @@ seek (int fd, unsigned position) {
 	if (fdesc == NULL) return;
 	if (fdesc->is_dir) return;
 	struct file* file = fdesc->file;
-	if (file == 1 || file == 2) return;
+	if ((uint64_t) file == 1 || (uint64_t) file == 2) return;
 
 	file_lock_aquire ();
 	
@@ -424,7 +431,7 @@ unsigned tell (int fd) {
 	if (fdesc == NULL) return -1;
 	if (fdesc->is_dir) return -1;
 	struct file* file = fdesc->file;
-	if (file == 1 || file == 2) return -1;
+	if ((uint64_t) file == 1 || (uint64_t) file == 2) return -1;
 
 	file_lock_aquire ();
 	unsigned pos = file_tell (file);
@@ -434,7 +441,7 @@ unsigned tell (int fd) {
 
 void close (int fd) {
 	struct fdesc *fdesc = get_fdesc_with_fd (fd);
-	if (fdesc == NULL) return -1;
+	if (fdesc == NULL) return;
 
 	file_lock_aquire ();
 	list_remove (&fdesc->elem);
@@ -443,7 +450,7 @@ void close (int fd) {
 		dir_close (fdesc->file);
 	}
 	else {
-		if (fdesc->file > 2) file_close (fdesc->file);	
+		if ((uint64_t) fdesc->file > 2) file_close (fdesc->file);	
 	}
 	file_lock_release ();
 	free (fdesc);
@@ -475,7 +482,7 @@ int dup2 (int oldfd, int newfd) {
 	if (oldfdesc == NULL) return -1;
 	if (oldfdesc == newfdesc) return newfd;
 
-	if (oldfdesc->file > 2) temp = file_duplicate (oldfdesc->file);
+	if ((uint64_t) oldfdesc->file > 2) temp = file_duplicate (oldfdesc->file);
 	else temp = oldfdesc->file;
 	if (temp == NULL) goto error;
 
@@ -491,7 +498,7 @@ int dup2 (int oldfd, int newfd) {
 	}
 	else {
 		if (temp == NULL) goto error;
-		if (newfdesc->file > 2) file_close (newfdesc->file);
+		if ((uint64_t) newfdesc->file > 2) file_close (newfdesc->file);
 		newfdesc->file = temp;
 	}
 
@@ -518,7 +525,7 @@ update_dup (struct file* file) {
 	
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table); i = list_next (i)) {
 		fdfile = list_entry (i, struct fdesc, elem)->file;
-		if (fdfile > 2 && fdfile != file) {
+		if (((uint64_t) fdfile) > 2 && fdfile != file) {
 			if (file_get_inode (fdfile) == inode) {
 				file_seek (fdfile, pos);
 			}
@@ -545,8 +552,8 @@ mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
 	struct fdesc *fdesc = get_fdesc_with_fd (fd);
 	if (fdesc == NULL) return NULL;
 	if (fdesc->is_dir) return NULL;
-	struct file* file = fdesc->file;
-	if (file == 1 || file == 2) return NULL;
+	file = fdesc->file;
+	if ((uint64_t) file == 1 || (uint64_t) file == 2) return NULL;
 
 	//offset validity check.
 	if (offset > file_length (file)) return NULL;
