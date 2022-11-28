@@ -157,7 +157,7 @@ fat_fs_init (void) {
 	fat_fs->data_start = fat_fs->bs.fat_start;
 	fat_fs->last_clst = fat_fs->fat_length-1;
 
-	
+	printf ("fat_length : %d\ndata start : %d\n", fat_fs->fat_length, fat_fs->data_start);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -173,12 +173,13 @@ fat_create_chain (cluster_t clst) {
 	cluster_t new_cluster = 0;
 	for (unsigned int i = 0; i < fat_fs->last_clst; i++) {
 		unsigned int idx = (clst + i) % (fat_fs->last_clst) + 1;
+		if (idx == 1 ) continue;
 		if (fat_fs->fat[idx] == 0) {
 			new_cluster = idx;
 			if (clst != 0) {
 				fat_fs->fat[clst] = new_cluster;
 			}
-			fat_fs->fat[new_cluster] = ~0;
+			fat_fs->fat[new_cluster] = EOChain;
 			return new_cluster;
 		}
 	}
@@ -192,14 +193,14 @@ fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
 	cluster_t nxt = clst;
 
-	while (clst != ~0) {
+	while (clst != EOChain) {
 		nxt = fat_fs->fat[clst];
 		fat_fs->fat[clst] = 0;
 		clst = nxt;
 	}
 
 	if (pclst > 0) {
-		fat_fs->fat[pclst] = ~0;
+		fat_fs->fat[pclst] = EOChain;
 	}
 }
 
@@ -214,7 +215,7 @@ fat_put (cluster_t clst, cluster_t val) {
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	if (clst == ~0)
+	if (clst > fat_fs->last_clst || clst < 2)
 		return 0;
 	return fat_fs->fat[clst];
 }
