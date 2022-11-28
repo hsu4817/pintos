@@ -74,12 +74,8 @@ filesys_create (const char *name, off_t initial_size) {
 		dir = dir_reopen (dir);
 	}
 
-	printf ("dir found.\n");
 	inode_cluster = fat_create_chain (0);
 	inode_sector = cluster_to_sector (inode_cluster);
-	printf("cluster: %d, sector: %d\n", inode_cluster, inode_sector);
-
-	printf ("sector allocated.\n");
 
 	bool success = (dir != NULL
 			&& inode_cluster != 0
@@ -103,6 +99,7 @@ filesys_open (const char *name) {
 	struct dir *dir;
 	struct inode *inode = NULL;
 
+	printf("filesys open : %s.\n", name);
 	ASSERT (name[0] != "/");
 	dir = thread_current ()->curdir;
 	if (dir == NULL) {
@@ -231,7 +228,7 @@ filesys_symlink (const char *target, const char *linkpath) {
 		dir_walk (target, &pdir, &inode, file_name, true);
 	
 	else 
-		inode = inode_open (ROOT_DIR_SECTOR);
+		inode = inode_open (cluster_to_sector(ROOT_DIR_CLUSTER));
 
 	if (inode == NULL) {
 		dir_close (pdir);
@@ -251,6 +248,8 @@ do_format (void) {
 #ifdef EFILESYS
 	/* Create FAT and save it to the disk. */
 	fat_create ();
+	if (!dir_create (cluster_to_sector (ROOT_DIR_CLUSTER), 16))
+		PANIC ("root directory creation failed");
 	fat_close ();
 #else
 	free_map_create ();

@@ -153,11 +153,9 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
-	fat_fs->fat_length = fat_fs->bs.fat_sectors;
-	fat_fs->data_start = fat_fs->bs.fat_start;
-	fat_fs->last_clst = fat_fs->fat_length-1;
-
-	printf ("fat_length : %d\ndata start : %d\n", fat_fs->fat_length, fat_fs->data_start);
+	fat_fs->fat_length = fat_fs->bs.total_sectors - fat_fs->bs.fat_sectors - 1;
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+	fat_fs->last_clst = fat_fs->fat_length;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -215,8 +213,9 @@ fat_put (cluster_t clst, cluster_t val) {
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	if (clst > fat_fs->last_clst || clst < 2)
+	if (clst > fat_fs->last_clst) {
 		return 0;
+	}
 	return fat_fs->fat[clst];
 }
 
@@ -224,14 +223,14 @@ fat_get (cluster_t clst) {
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	if (clst == 0)
+	if (clst > 0 && clst <= fat_fs->last_clst)
+		return fat_fs->data_start + clst - 1;
+	else {
 		return -1;
-	return fat_fs->data_start + clst - 1;
+	}
 }
 
 cluster_t
 sector_to_cluster (disk_sector_t sector) {
 	return sector + 1 - fat_fs->data_start;
 }
-
-

@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 #include "filesys/file.h"
 #include "threads/thread.h"
+#include "filesys/fat.h"
 
 /* A directory. */
 struct dir {
@@ -48,7 +49,7 @@ dir_open (struct inode *inode) {
  * Return true if successful, false on failure. */
 struct dir *
 dir_open_root (void) {
-	return dir_open (inode_open (ROOT_DIR_SECTOR));
+	return dir_open (inode_open (cluster_to_sector (ROOT_DIR_CLUSTER)));
 }
 
 /* Opens and returns a new directory for the same inode as DIR.

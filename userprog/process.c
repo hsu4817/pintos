@@ -389,6 +389,7 @@ process_exit (void) {
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	file_close (curr->excutable);
+	dir_close (curr->curdir);
 	/* Cleanup file desc table. */
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
