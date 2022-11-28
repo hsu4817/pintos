@@ -214,6 +214,8 @@ fat_put (cluster_t clst, cluster_t val) {
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	if (clst == ~0)
+		return 0;
 	return fat_fs->fat[clst];
 }
 
@@ -221,7 +223,9 @@ fat_get (cluster_t clst) {
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
-	return fat_fs->data_start + fat_fs->fat[clst] - 1;
+	if (clst == 0)
+		return -1;
+	return fat_fs->data_start + clst - 1;
 }
 
 cluster_t

@@ -69,7 +69,10 @@ filesys_create (const char *name, off_t initial_size) {
 	struct dir *dir = thread_current ()->curdir;
 	if (dir == NULL) {
 		dir = dir_open_root ();
-	}	
+	}
+	else {
+		dir = dir_reopen (dir);
+	}
 
 	inode_cluster = fat_create_chain (0);
 	inode_sector = cluster_to_sector (inode_cluster);
@@ -98,7 +101,10 @@ filesys_open (const char *name) {
 	struct dir *dir = thread_current ()->curdir;
 	if (dir == NULL) {
 		dir = dir_open_root ();
-	}	
+	}
+	else {
+		dir = dir_reopen (dir);
+	}
 
 	if (dir != NULL)
 		dir_lookup (dir, name, &inode);
@@ -117,7 +123,10 @@ filesys_remove (const char *name) {
 	struct dir *dir = thread_current ()->curdir;
 	if (dir == NULL) {
 		dir = dir_open_root ();
-	}	
+	}
+	else {
+		dir = dir_reopen (dir);
+	}
 	bool success = dir != NULL && dir_remove (dir, name);
 	dir_close (dir);
 

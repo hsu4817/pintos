@@ -205,9 +205,11 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
 
+	disk_sector_t sector_idx = byte_to_sector (inode, offset);
+	if (sector_idx == -1) return 0;
+
 	while (size > 0) {
 		/* Disk sector to read, starting byte offset within sector. */
-		disk_sector_t sector_idx = byte_to_sector (inode, offset);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -239,6 +241,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_read += chunk_size;
+		sector_idx = cluster_to_sector (fat_get (sector_to_cluster (sector_idx)));
 	}
 	free (bounce);
 
@@ -291,7 +294,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		/* seulke: Update file length. */
 		disk_write (filesys_disk, inode->sector, &inode->data);
 	}
-	cluster_t cluster_idx = sector_to_cluster (sector_idx);
 
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
@@ -333,12 +335,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_written += chunk_size;
-
-		if (cluster_idx == ~0) break;
-		else {
-			cluster_idx = fat_get(cluster_idx);
-			sector_idx = cluster_to_sector (cluster_idx);
-		}
+		sector_idx = cluster_to_sector (fat_get (sector_to_cluster (sector_idx)));
 	}
 	free (bounce);
 
