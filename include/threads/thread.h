@@ -210,6 +210,6 @@ void remove_exit_log (struct exit_log_t *log);
 
 void file_lock_aquire (void);
 void file_lock_release (void);
-void file_lock_exit (voie);
+void file_lock_exit (void);
 
 #endif /* threads/thread.h */

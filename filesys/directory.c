@@ -246,17 +246,19 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 	bool success = false;
 
 	token = strtok_r (path, "/", &saveptr);
-	if (token == "") {
+	if (token[0] == '\0') {
 		cur_dir = dir_open_root ();
+		bytes_parsed += 1;
+		token = strtok_r (NULL, "/", &saveptr);
 	}
 	else {
 		cur_dir = dir_reopen (thread_current ()->curdir);
 	}
-	bytes_parsed += strlen (token) + 1;
 
 	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
 		bytes_parsed += strlen (token) + 1;
-		
+		if (strlen(token) > 14)
+			goto done;
 		if (bytes_parsed == size) {
 			dir_lookup (cur_dir, token, &next_inode);
 			if (exist && next_inode) {
@@ -291,6 +293,7 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 		}
 		else {
 			dir_close(cur_dir);
+			inode_close (next_inode);
 		}
 		return success;
 }

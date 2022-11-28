@@ -5,6 +5,7 @@
 #include <debug.h>
 #include <stddef.h>
 #include "threads/thread.h"
+#include "filesys/off_t.h"
 
 void syscall_init (void);
 

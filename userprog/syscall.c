@@ -31,7 +31,7 @@
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-struct fdesc* get_fdesc_with_fd (int fd);
+static struct fdesc* get_fdesc_with_fd (int fd);
 void update_dup (struct file*);
 static bool ptr_is_writable (void *addr); 
 
@@ -301,29 +301,30 @@ int open (const char *file) {
 	if (file == NULL) exit(-1);
 	if (*file == '\0') return -1;
 
-	fd = malloc (sizeof(struct fdesc));
-	if (fd == NULL) return -1;
+	struct dir *pdir;
+	struct inode *inode;
+	char file_name[15];
+	void *fp;
 
 	file_lock_aquire ();
 	intr_enable ();
 
-	void *fp = dir_open_file (curr->curdir, file, &is_file);
-
-	struct inode *inode = NULL;
-	if (!dir_lookup (curr->curdir, file, &inode))
-		inode_close (inode);
+	if (!dir_walk (file, &pdir, &inode, file_name, true))
+		return -1;
 	
-	if (inode_is_dir (inode))
+	if (inode_is_dir(inode)) {
 		fp = dir_open (inode);
-	else 
+	}
+	else {
 		fp = file_open (inode);
+	}
 
 	file_lock_release ();
 
-	if (fp == NULL) {
-		free(fd);
+	if (fp == NULL) 
 		return -1;
-	}
+	fd = malloc (sizeof(struct fdesc));
+		if (fd == NULL) return -1;
 
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
 	fd->file = fp;
