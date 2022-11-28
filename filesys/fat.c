@@ -173,7 +173,7 @@ fat_create_chain (cluster_t clst) {
 	cluster_t new_cluster = 0;
 	for (unsigned int i = 0; i < fat_fs->last_clst; i++) {
 		unsigned int idx = (clst + i) % (fat_fs->last_clst) + 1;
-		if (idx == 1 ) continue;
+		if (idx == ROOT_DIR_CLUSTER) continue;
 		if (fat_fs->fat[idx] == 0) {
 			new_cluster = idx;
 			if (clst != 0) {

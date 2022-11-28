@@ -77,7 +77,7 @@ filesys_create (const char *name, off_t initial_size) {
 	printf ("dir found.\n");
 	inode_cluster = fat_create_chain (0);
 	inode_sector = cluster_to_sector (inode_cluster);
-	printf("cluster: %d, sector: %d\n");
+	printf("cluster: %d, sector: %d\n", inode_cluster, inode_sector);
 
 	printf ("sector allocated.\n");
 
@@ -87,6 +87,7 @@ filesys_create (const char *name, off_t initial_size) {
 			&& dir_add (dir, name, inode_sector));
 	if (!success && inode_cluster != 0)
 		fat_remove_chain (inode_cluster, 0);
+
 	dir_close (dir);
 
 	return success;

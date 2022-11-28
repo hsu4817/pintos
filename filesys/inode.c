@@ -48,12 +48,13 @@ byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
 	
 	if (pos < inode->data.length) {
-		size_t sectors_left;
+		size_t sector_target;
 		cluster_t clst;
 
 		clst = inode->data.start;
-		for (sectors_left = bytes_to_sectors (pos) - 1; sectors_left != 0; sectors_left--) {
+		for (sector_target = (pos / DISK_SECTOR_SIZE); sector_target != 0; sector_target--) {
 			clst = fat_get (clst);
+			ASSERT (clst != 0);
 		}
 		return cluster_to_sector (clst);
 	}
