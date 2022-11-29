@@ -30,6 +30,7 @@ static struct fat_fs *fat_fs;
 
 void fat_boot_create (void);
 void fat_fs_init (void);
+static bool cluster_valid (cluster_t clst);
 
 void
 fat_init (void) {
