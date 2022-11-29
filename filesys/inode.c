@@ -44,13 +44,13 @@ static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
 	if (pos < inode->data.length) {
-		size_t sector_target;
+		size_t sector_target = pos / DISK_SECTOR_SIZE;
 		cluster_t clst = inode->data.start;
-		ASSERT (clst != 0);
-		for (sector_target = (pos / DISK_SECTOR_SIZE); sector_target != 0; sector_target--) {
-			clst = fat_get (clst);
+		for (int i=0; i < sector_target; i++) {
+			clst = fat_get (clst);		
 		}
 		ASSERT (clst != EOChain);
+
 		return cluster_to_sector (clst);
 	}
 	else
@@ -270,6 +270,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		int sectors_have = bytes_to_sectors (inode->data.length);
 		int sectors_new = sectors_need - sectors_have;
 		
+		//printf ("file extend | size : %d, offset : %d, have : %d, need : %d\n", size, offset, sectors_have, sectors_need);
+
 		cluster_t cluster_EOF;
 		if (sectors_have){
 			cluster_EOF = inode->data.start;
@@ -289,11 +291,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 			clst_iter = fat_create_chain (clst_new);
 			if (clst_iter != 0) {
 				if (clst_new == 0) {
-					inode->data.start = cluster_to_sector (clst_iter);
+					inode->data.start = clst_iter;
 				}
 				static char zeros[DISK_SECTOR_SIZE];
 				memset (zeros, 0, DISK_SECTOR_SIZE);
 				disk_write (filesys_disk, cluster_to_sector (clst_iter), zeros);
+				clst_new = clst_iter;
 			}
 			else {
 				printf("inode extend fail.\n");
@@ -308,6 +311,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		if (extend_success) {
 			inode->data.length = offset + size;
 			disk_write (filesys_disk, inode->sector, &inode->data);
+			ASSERT (byte_to_sector (inode, offset + size - 1) != -1);
 		}
 		else {
 			return 0;
@@ -317,7 +321,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
-		ASSERT (sector_idx != -1);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */
