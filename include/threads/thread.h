@@ -127,6 +127,7 @@ struct thread {
 	struct supplemental_page_table spt;
 	uintptr_t rsp_stack_growth;			/* saved rsp for fault handling. */
 #endif
+	struct dir *curdir;					/* current working directory. */
 
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */

@@ -714,6 +714,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->is_kernel = true;
 	t->someone_is_waiting = false;
 	t->fork_success = false;
+	t->curdir = NULL;
 	sema_init(&t->fork_sema, 0);
 }
 

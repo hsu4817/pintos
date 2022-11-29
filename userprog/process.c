@@ -94,6 +94,8 @@ initd (void *f_name) {
 	}
 	
 	/* Init stdio and stdout file descriptor. */
+	struct thread *cur = thread_current ();
+
 
 	struct fdesc *stdinput = malloc (sizeof(struct fdesc));
 	struct fdesc *stdoutput = malloc (sizeof(struct fdesc));
@@ -106,8 +108,12 @@ initd (void *f_name) {
 	stdoutput->desc_no = 1;
 	stdoutput->file = 2;
 	
-	list_push_back (&thread_current ()->desc_table, &stdinput->elem);
-	list_push_back (&thread_current ()->desc_table, &stdoutput->elem);
+	list_push_back (&cur->desc_table, &stdinput->elem);
+	list_push_back (&cur->desc_table, &stdoutput->elem);
+
+	file_lock_aquire ();
+	cur->curdir = dir_open_root ();
+	file_lock_release ();
 
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd while exec.\n");
@@ -237,6 +243,7 @@ __do_fork (void *aux[]) {
 	file_lock_aquire ();
 	current->parent = parent;
 	current->excutable = file_duplicate (parent->excutable);
+	current->curdir = dir_reopen (parent->curdir);
 	file_lock_release ();
 
 	if (!process_init ()){
@@ -379,6 +386,7 @@ process_exit (void) {
 	// printf ("%d sema up and cleanup process.\n", curr->tid);
 
 	file_close (curr->excutable);
+	dir_close (curr->curdir);
 
 	struct list_elem *i;
 	for (i = list_begin (&curr->desc_table); i != list_end (&curr->desc_table);){
