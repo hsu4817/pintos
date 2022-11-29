@@ -71,7 +71,7 @@ filesys_create (const char *name, off_t initial_size) {
 	struct dir *dir = dir_open_root ();
 	inode_cluster = fat_create_chain (0);
 	if (inode_cluster) {
-		if (inode_create (cluster_to_sector (inode_cluster), initial_size)) {
+		if (inode_create (cluster_to_sector (inode_cluster), initial_size, false)) {
 			success = dir_add (dir, name, cluster_to_sector (inode_cluster));
 		}
 	} 
@@ -89,10 +89,8 @@ filesys_create (const char *name, off_t initial_size) {
  * or if an internal memory allocation fails. */
 struct file *
 filesys_open (const char *name) {
-	struct dir *dir;
+	struct dir *dir = dir_open_root ();
 	struct inode *inode = NULL;
-	
-
 
 	if (dir != NULL)
 		dir_lookup (dir, name, &inode);
