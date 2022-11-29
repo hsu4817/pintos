@@ -30,6 +30,11 @@ filesys_init (bool format) {
 		do_format ();
 
 	fat_open ();
+	struct dir *dir = dir_open_root ();
+	if (!dir_add (dir, ".", cluster_to_sector (ROOT_DIR_CLUSTER)))
+		PANIC ("root directory creation fail");
+	dir_close (dir);
+
 #else
 	/* Original FS */
 	free_map_init ();
@@ -84,8 +89,10 @@ filesys_create (const char *name, off_t initial_size) {
  * or if an internal memory allocation fails. */
 struct file *
 filesys_open (const char *name) {
-	struct dir *dir = dir_open_root ();
+	struct dir *dir;
 	struct inode *inode = NULL;
+	
+
 
 	if (dir != NULL)
 		dir_lookup (dir, name, &inode);
@@ -115,8 +122,10 @@ do_format (void) {
 #ifdef EFILESYS
 	/* Create FAT and save it to the disk. */
 	fat_create ();
+	
 	if (!dir_create (cluster_to_sector (ROOT_DIR_CLUSTER), 16))
 		PANIC ("root directory creation failed");
+
 	fat_close ();
 #else
 	free_map_create ();

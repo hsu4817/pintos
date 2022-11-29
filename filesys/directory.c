@@ -6,6 +6,7 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "filesys/fat.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir {
@@ -214,4 +215,69 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 		}
 	}
 	return false;
+}
+
+/* Walk through dir TARGET. Stores parent directory of target to PDIR, 
+ * and stores inode of target to INODE if EXIST is true. */
+bool
+dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *file_name, bool exist) {
+	char *path = malloc (strlen(target)+1);
+	strlcpy (path, target, strlen(target)+1);
+
+	char *token, *saveptr;
+	struct inode *next_inode = NULL;
+	struct dir *cur_dir = NULL;
+	int bytes_parsed = 0;
+	int size = strlen (target) + 1;
+	bool success = false;
+
+	token = strtok_r (path, "/", &saveptr);
+	if (token[0] == '\0') {
+		cur_dir = dir_open_root ();
+		bytes_parsed += 1;
+		token = strtok_r (NULL, "/", &saveptr);
+	}
+	else {
+		cur_dir = dir_reopen (thread_current ()->curdir);
+	}
+
+	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
+		bytes_parsed += strlen (token) + 1;
+		if (strlen(token) > 14)
+			goto done;
+		if (bytes_parsed == size) {
+			dir_lookup (cur_dir, token, &next_inode);
+			if (exist && next_inode) {
+				success = true;
+			}
+			else if (!exist && !next_inode) {
+				success = true;
+			}
+			goto done;
+
+		}
+		else {
+			if (!dir_lookup (cur_dir, token, &next_inode)) {
+				goto done;
+			}
+		}
+
+		dir_close (cur_dir);
+		cur_dir = dir_open (next_inode);
+		if (cur_dir == NULL)
+			goto done;
+	
+	}
+	done:
+		free (path);
+		if (success) {
+			if (inode) *inode = next_inode;
+			if (pdir) *pdir = cur_dir;
+			memcpy (file_name, token, 15);
+		}
+		else {
+			dir_close(cur_dir);
+			inode_close (next_inode);
+		}
+		return success;
 }
