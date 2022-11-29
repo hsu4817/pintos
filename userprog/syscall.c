@@ -300,7 +300,8 @@ write (int fd, const void *buffer, unsigned length) {
 		file_lock_release ();
 		return length;		
 	}
-	
+	if (inode_is_dir (file_get_inode (file)))
+		return -1;	
 	file_lock_aquire ();
 
 	intr_enable ();

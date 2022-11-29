@@ -131,10 +131,13 @@ filesys_remove (const char *name) {
 	else
 		return false;
 
+	// printf ("remove | remove %s\n", file_name);
 	if (inode_is_dir (inode)) {
 		struct dir *target_dir = dir_open (inode);
-		if (!dir_is_empty (target_dir))
-			success = false;
+		if (!dir_is_empty (target_dir)){
+			dir_close (target_dir);
+			return false;
+		}
 		dir_close (target_dir);
 	}
 

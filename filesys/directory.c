@@ -329,7 +329,7 @@ dir_is_empty (struct dir *dir) {
 	for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 			ofs += sizeof e) {
 		if (e.in_use) {
-			if (strcmp (e.name, ".") || strcmp (e.name, ".."))
+			if (strcmp (e.name, ".") && strcmp (e.name, ".."))
 				return false;
 		}
 	}
