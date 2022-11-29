@@ -92,9 +92,14 @@ filesys_open (const char *name) {
 	struct dir *dir = NULL;
 	struct inode *inode = NULL;
 
-	if (!dir_walk (name, &dir, &inode, NULL, true)) {
-		return false;
+	if (strcmp(name, "/")) {
+		if (!dir_walk (name, &dir, &inode, NULL, true)) {
+			return false;
+		}
 	}
+	else
+		return dir_open_root ();
+
 	dir_close (dir);
 	if (inode_is_dir (inode)) 
 		return dir_open (inode);
@@ -108,8 +113,27 @@ filesys_open (const char *name) {
  * or if an internal memory allocation fails. */
 bool
 filesys_remove (const char *name) {
-	struct dir *dir = dir_open_root ();
-	bool success = dir != NULL && dir_remove (dir, name);
+	struct dir *dir = NULL;
+	struct inode *inode = NULL;
+	char file_name[15];
+	bool success = false;
+
+	if (strcmp(name, "/")){
+		if (!dir_walk (name, &dir, &inode, file_name, true)) {
+			return false;
+		}
+	}
+	else
+		return false;
+
+	if (inode_is_dir (inode)) {
+		struct dir *target_dir = dir_open (inode);
+		if (!dir_is_empty (target_dir))
+			success = false;
+		dir_close (target_dir);
+	}
+
+	success = dir_remove (dir, file_name);
 	dir_close (dir);
 
 	return success;

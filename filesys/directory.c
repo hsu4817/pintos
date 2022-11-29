@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 #include "filesys/fat.h"
 #include "threads/thread.h"
+#include "lib/string.h"
 
 /* A directory. */
 struct dir {
@@ -245,6 +246,7 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 			cur_dir = dir_open_root ();
 	}
 
+
 	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
 		bytes_parsed += strlen (token) + 1;
 		if (strlen(token) > 14)
@@ -272,8 +274,8 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 			goto done;
 	
 	}
+	PANIC ("dir walk | must not reach");
 	done:
-		free (path);
 		if (success) {
 			if (inode) *inode = next_inode;
 			if (pdir) *pdir = cur_dir;
@@ -283,5 +285,23 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 			dir_close(cur_dir);
 			inode_close (next_inode);
 		}
+		free (path);
 		return success;
+}
+
+/* Check if DIR is empty. (has only "." and "..") */
+bool
+dir_is_empty (struct dir *dir) {
+	struct dir_entry e;
+	size_t ofs;
+	int cnt;
+
+	for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+			ofs += sizeof e) {
+		if (e.in_use) {
+			if (strcmp (e.name, ".") || strcmp (e.name, ".."))
+				return false;
+		}
+	}
+	return true;
 }
