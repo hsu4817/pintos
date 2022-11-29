@@ -269,32 +269,44 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		int sectors_need = bytes_to_sectors (offset + size);
 		int sectors_have = bytes_to_sectors (inode->data.length);
 		int sectors_new = sectors_need - sectors_have;
-
-		cluster_t cluster_EOF = inode->data.start;
-
-		for (int i = 1; i < sectors_have; i++) {
-			cluster_EOF = fat_get(cluster_EOF);
+		
+		cluster_t cluster_EOF;
+		if (sectors_have){
+			cluster_EOF = inode->data.start;
+			ASSERT (cluster_EOF != 0);
+			for (int i = 1; i < sectors_have; i++) {
+				cluster_EOF = fat_get(cluster_EOF);
+			}
+		}
+		else {
+			cluster_EOF = 0;
 		}
 
-		ASSERT (fat_get(cluster_EOF) == EOChain);
-
 		cluster_t clst_new = cluster_EOF;
+		cluster_t clst_iter = clst_new;
 		bool extend_success = true;
 		for (int i = 0; i < sectors_new; i++) {
-			clst_new = fat_create_chain (clst_new);
-			if (clst_new != 0) {
+			clst_iter = fat_create_chain (clst_new);
+			if (clst_iter != 0) {
+				if (clst_new == 0) {
+					inode->data.start = cluster_to_sector (clst_iter);
+				}
 				static char zeros[DISK_SECTOR_SIZE];
-				disk_write (filesys_disk, cluster_to_sector (clst_new), zeros);
+				memset (zeros, 0, DISK_SECTOR_SIZE);
+				disk_write (filesys_disk, cluster_to_sector (clst_iter), zeros);
 			}
 			else {
 				printf("inode extend fail.\n");
+				if (cluster_EOF == 0) {
+					fat_remove_chain (inode->data.start, 0);
+				}
 				fat_remove_chain (fat_get(cluster_EOF), cluster_EOF);
 				extend_success = false;
 				break;
 			}
 		}
 		if (extend_success) {
-			inode->data.length = offset + size + 1;
+			inode->data.length = offset + size;
 			disk_write (filesys_disk, inode->sector, &inode->data);
 		}
 		else {
@@ -305,6 +317,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
+		ASSERT (sector_idx != -1);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */
