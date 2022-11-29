@@ -4,8 +4,8 @@
 #include <round.h>
 #include <string.h>
 #include "filesys/filesys.h"
-#include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "filesys/fat.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -13,7 +13,7 @@
 /* On-disk inode.
  * Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk {
-	disk_sector_t start;                /* First data sector. */
+	cluster_t start;                	/* First data cluster. */
 	off_t length;                       /* File size in bytes. */
 	unsigned magic;                     /* Magic number. */
 	uint32_t unused[125];               /* Not used. */
@@ -43,8 +43,16 @@ struct inode {
 static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
-	if (pos < inode->data.length)
-		return inode->data.start + pos / DISK_SECTOR_SIZE;
+	if (pos < inode->data.length) {
+		size_t sector_target;
+		cluster_t clst = inode->data.start;
+		ASSERT (clst != 0);
+		for (sector_target = (pos / DISK_SECTOR_SIZE); sector_target != 0; sector_target--) {
+			clst = fat_get (clst);
+		}
+		ASSERT (clst != EOChain);
+		return cluster_to_sector (clst);
+	}
 	else
 		return -1;
 }
@@ -80,18 +88,36 @@ inode_create (disk_sector_t sector, off_t length) {
 		size_t sectors = bytes_to_sectors (length);
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
-		if (free_map_allocate (sectors, &disk_inode->start)) {
+		disk_inode->start = 0;
+		bool alloc_success = true;
+
+		if (sectors > 0 ) {
+			cluster_t clst_cur = 0;
+			cluster_t clst_get = 0;
+			for (size_t i = 0; i < sectors; i++) {
+				if (clst_get = fat_create_chain (clst_cur)) {
+					if (clst_cur == 0)
+						disk_inode->start = clst_get;
+					clst_cur = clst_get;
+				}
+				else {
+					alloc_success = false;
+					break;
+				}
+			}
+		}
+		if (alloc_success) {
 			disk_write (filesys_disk, sector, disk_inode);
 			if (sectors > 0) {
 				static char zeros[DISK_SECTOR_SIZE];
-				size_t i;
-
-				for (i = 0; i < sectors; i++) 
-					disk_write (filesys_disk, disk_inode->start + i, zeros); 
+				memset (zeros, 0, DISK_SECTOR_SIZE);
+				for (cluster_t curr_clus = disk_inode->start; curr_clus != EOChain; curr_clus = fat_get (curr_clus)) {
+					disk_write (filesys_disk, cluster_to_sector (curr_clus), zeros);
+				}
 			}
-			success = true; 
-		} 
-		free (disk_inode);
+			success = true;
+		}
+		free(disk_inode);
 	}
 	return success;
 }
@@ -159,9 +185,8 @@ inode_close (struct inode *inode) {
 
 		/* Deallocate blocks if removed. */
 		if (inode->removed) {
-			free_map_release (inode->sector, 1);
-			free_map_release (inode->data.start,
-					bytes_to_sectors (inode->data.length)); 
+			fat_remove_chain (sector_to_cluster (inode->sector), 0);
+			fat_remove_chain (sector_to_cluster (inode->data.start), 0);
 		}
 
 		free (inode); 
@@ -239,6 +264,43 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
 	if (inode->deny_write_cnt)
 		return 0;
+
+	if (byte_to_sector (inode, offset) == -1) {
+		int sectors_need = bytes_to_sectors (offset + size);
+		int sectors_have = bytes_to_sectors (inode->data.length);
+		int sectors_new = sectors_need - sectors_have;
+
+		cluster_t cluster_EOF = inode->data.start;
+
+		for (int i = 1; i < sectors_have; i++) {
+			cluster_EOF = fat_get(cluster_EOF);
+		}
+
+		ASSERT (fat_get(cluster_EOF) == EOChain);
+
+		cluster_t clst_new = cluster_EOF;
+		bool extend_success = true;
+		for (int i = 0; i < sectors_new; i++) {
+			clst_new = fat_create_chain (clst_new);
+			if (clst_new != 0) {
+				static char zeros[DISK_SECTOR_SIZE];
+				disk_write (filesys_disk, cluster_to_sector (clst_new), zeros);
+			}
+			else {
+				printf("inode extend fail.\n");
+				fat_remove_chain (fat_get(cluster_EOF), cluster_EOF);
+				extend_success = false;
+				break;
+			}
+		}
+		if (extend_success) {
+			inode->data.length = offset + size + 1;
+			disk_write (filesys_disk, inode->sector, &inode->data);
+		}
+		else {
+			return 0;
+		}
+	}
 
 	while (size > 0) {
 		/* Sector to write, starting byte offset within sector. */
