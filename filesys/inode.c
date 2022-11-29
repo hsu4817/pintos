@@ -396,3 +396,8 @@ bool
 inode_is_dir (const struct inode *inode) {
 	return inode->data.is_dir == 1;
 }
+
+int
+inode_get_opencnt (const struct inode *inode) {
+	return inode->open_cnt;
+}
