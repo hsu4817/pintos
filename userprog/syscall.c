@@ -123,6 +123,24 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_MUNMAP:
 			munmap (f->R.rdi);
 			break;
+		case SYS_CHDIR:
+			f->R.rax = chdir ((const char *) f->R.rdi);
+			break;
+		case SYS_MKDIR:
+			f->R.rax = mkdir ((const char *) f->R.rdi);
+			break;
+		case SYS_READDIR:
+			f->R.rax = readdir ((int) f->R.rdi, (char *)f->R.rsi);
+			break;
+		case SYS_ISDIR:
+			f->R.rax = isdir ((int) f->R.rdi);
+			break;
+		case SYS_INUMBER:
+			f->R.rax = inumber ((int) f->R.rdi);
+			break;
+		case SYS_SYMLINK:
+			f->R.rax = symlink ((const char *) f->R.rdi, (const char *)f->R.rsi);
+			break;
 		default:
 			printf ("Unknown syscall number %d.\n", syscall_no);
 			thread_exit ();
@@ -464,4 +482,90 @@ munmap (void *addr) {
 	do_munmap (addr);
 	file_lock_release ();
 	return;
+}
+
+bool chdir (const char *dir){
+	struct dir *pdir;
+	struct inode *inode;
+	bool success = false;
+	struct thread *cur = thread_current();
+	struct dir *ndir = NULL;
+	char dir_name[15];
+	
+	if (dir == NULL)
+		return false;
+	if (dir[0] == '\0')
+		return false;
+
+	file_lock_aquire ();
+	intr_enable ();
+	if (strcmp (dir, "/")) {
+		if (!dir_walk (dir, &pdir, &inode, dir_name, true))
+			return false;
+		// printf ("chdir | dir_walk returned %s\n", dir_name);
+		dir_close (pdir);
+		if (!inode_is_dir(inode)) {
+			inode_close (inode);
+			return false;
+		}
+		ndir = dir_open (inode);
+	}
+	else 
+		ndir = dir_open_root ();
+	
+	if (ndir) {
+		// printf ("chdir | successfully opened goal directory %s.", dir_name);
+		dir_close (cur->curdir);
+		cur->curdir = ndir;
+		success = true;
+	}
+	intr_disable ();
+	file_lock_release ();
+	// printf ("chdir | chdir done\n");
+	return success;
+}
+
+bool mkdir (const char *dir){
+	if (dir == NULL)
+		return false;
+	if (dir[0] == '\0')
+		return false;
+
+	bool success = false;
+	file_lock_aquire ();
+	intr_enable ();
+	success = filesys_mkdir(dir);
+	intr_disable ();
+	file_lock_release ();
+	return success;
+}
+
+bool readdir (int fd, char *name){
+	bool success = false;
+	return success;
+}
+
+bool isdir (int fd){
+	struct dir *dir = get_file_with_fd (fd);
+	if (dir) 
+		return inode_is_dir (dir_get_inode (dir));
+	else
+		return false;
+}
+
+int inumber (int fd){
+	struct file *file = get_file_with_fd(fd);
+	
+	if (file) 
+		inode_get_inumber (file_get_inode (file));
+	else 
+		return -1;
+}
+
+int symlink (const char *target, const char *linkpath){
+	int success;
+	file_lock_aquire ();
+	// success = filesys_symlink (target, linkpath);
+	file_lock_release ();
+	return success;
 }

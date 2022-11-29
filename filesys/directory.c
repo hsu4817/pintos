@@ -227,7 +227,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 /* Walk through dir TARGET. Stores parent directory of target to PDIR, 
  * and stores inode of target to INODE if EXIST is true. */
 bool
-dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *file_name, bool exist) {
+dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *file_name, bool exist) {	
 	char *path = malloc (strlen(target)+1);
 	strlcpy (path, target, strlen(target)+1);
 
@@ -235,38 +235,58 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 	struct inode *next_inode = NULL;
 	struct dir *cur_dir = NULL;
 	int bytes_parsed = 0;
-	int size = strlen (target) + 1;
+	int size = strlen (target);
 	bool success = false;
 
-	token = strtok_r (path, "/", &saveptr);
-	if (token[0] == '\0') {
-		cur_dir = dir_open_root ();
-		bytes_parsed += 1;
-		token = strtok_r (NULL, "/", &saveptr);
+	// printf ("dir walk | tokenize %s\n", path);
+
+	token = path;
+	saveptr = path;
+	while (*saveptr == '/') 
+		saveptr++;
+		bytes_parsed++;
+
+	if (saveptr > path) {
+		/* absolute path */
+		if (saveptr - path == 1)
+			cur_dir = dir_open_root ();
+		else 
+			goto done;
 	}
-	else {
+	else 
+		/* relative path */
 		cur_dir = thread_current ()->curdir;
 		if (cur_dir)
-			cur_dir = dir_reopen (cur_dir);
-		else 
+			cur_dir = dir_reopen(cur_dir);
+		else
 			cur_dir = dir_open_root ();
-	}
+	
+	if (cur_dir == NULL)
+		goto done;
 
+	token = saveptr;
 
-	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
-		bytes_parsed += strlen (token) + 1;
-		if (strlen(token) > 14)
+	while (saveptr < path + size) {
+		while (*saveptr != '/' && *saveptr != '\0') {
+			saveptr++;
+			bytes_parsed++;
+		}
+		if (token == saveptr)
 			goto done;
-		if (bytes_parsed == size) {
+		*saveptr = '\0';
+		if (saveptr - token > 14)
+			goto done;
+
+		if (saveptr == path + size) {
+			// printf ("dir walk | goal is %s\n", token);
 			dir_lookup (cur_dir, token, &next_inode);
 			if (exist && next_inode) {
 				success = true;
 			}
-			else if (!exist && !next_inode) {
+			else if (!exist && (next_inode == NULL)) {
 				success = true;
 			}
 			goto done;
-
 		}
 		else {
 			if (!dir_lookup (cur_dir, token, &next_inode)) {
@@ -274,18 +294,22 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 			}
 		}
 
+		if (!inode_is_dir(next_inode))
+			goto done;
 		dir_close (cur_dir);
 		cur_dir = dir_open (next_inode);
 		if (cur_dir == NULL)
 			goto done;
-	
+		token = ++saveptr;
 	}
+
 	PANIC ("dir walk | must not reach");
 	done:
 		if (success) {
 			if (inode) *inode = next_inode;
 			if (pdir) *pdir = cur_dir;
-			if (file_name) memcpy (file_name, token, 15);
+			if (file_name) memcpy (file_name, token, strlen(token) + 1);
+			// printf("dir walk | return %s\n", token);
 		}
 		else {
 			dir_close(cur_dir);

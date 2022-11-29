@@ -67,12 +67,17 @@ filesys_create (const char *name, off_t initial_size) {
 	disk_sector_t inode_sector = 0;
 	cluster_t inode_cluster = 0;
 	bool success = false;
+	// struct dir *dir = dir_open_root ();
+	struct dir *dir = NULL;
+	char file_name[15];
 
-	struct dir *dir = dir_open_root ();
+	if (!dir_walk (name, &dir, NULL, file_name, false)) 
+		return false;
+
 	inode_cluster = fat_create_chain (0);
 	if (inode_cluster) {
 		if (inode_create (cluster_to_sector (inode_cluster), initial_size, false)) {
-			success = dir_add (dir, name, cluster_to_sector (inode_cluster));
+			success = dir_add (dir, file_name, cluster_to_sector (inode_cluster));
 		}
 	} 
 	if (!success && inode_cluster != 0)
@@ -136,6 +141,48 @@ filesys_remove (const char *name) {
 	success = dir_remove (dir, file_name);
 	dir_close (dir);
 
+	return success;
+}
+
+bool
+filesys_mkdir (const char *dir) {
+	struct dir *pdir = NULL;
+	struct dir *new_dir = NULL;
+	char dir_name[15];
+	cluster_t clst = 0;
+	bool success = false;
+
+	if (!dir_walk (dir, &pdir, NULL, dir_name, false))
+		goto done;
+	
+	// printf ("mkdir | dir walk returned %s\n", dir_name);
+
+	clst = fat_create_chain (0);
+	if (clst == 0) 
+		goto done;
+	
+	disk_sector_t sector = cluster_to_sector (clst);
+	if (!dir_create (sector, 2))
+		goto done;
+	
+	if (!dir_add (pdir, dir_name, sector))
+		goto done;
+
+	new_dir = dir_open (inode_open (sector));
+	if (new_dir == NULL)
+		goto done;
+
+	if (dir_add (new_dir, ".", sector) 
+		&& dir_add (new_dir, "..", inode_get_inumber(dir_get_inode (pdir))))
+		success = true;
+	else {
+		dir_close (new_dir);
+		dir_remove (pdir, new_dir);
+	}
+	
+done:
+	dir_close (pdir);
+	dir_close (new_dir);
 	return success;
 }
 
