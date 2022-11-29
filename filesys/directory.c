@@ -187,8 +187,11 @@ dir_remove (struct dir *dir, const char *name) {
 	if (inode == NULL)
 		goto done;
 
-	if (inode_get_opencnt (inode) > 1) 
-		goto done;
+	if (inode_is_dir(inode)) {
+		if (inode_get_opencnt (inode) > 1) 
+			goto done;
+	}
+
 
 	/* Erase directory entry. */
 	e.in_use = false;
