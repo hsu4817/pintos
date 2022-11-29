@@ -13,6 +13,7 @@
 
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"
 #include "userprog/process.h"
@@ -24,6 +25,7 @@
 #include "filesys/inode.h"
 #include "vm/file.h"
 #include "vm/vm.h"
+
 
 
 
@@ -208,18 +210,17 @@ int open (const char *file) {
 	if (file == NULL) exit(-1);
 	if (*file == '\0') return -1;
 
-	fd = malloc (sizeof(struct fdesc));
-	if (fd == NULL) return -1;
-
 	file_lock_aquire ();
 
 	intr_enable ();
 	FD = filesys_open (file);
 	file_lock_release ();
 	if (FD == NULL) {
-		free (fd);
 		return -1;
 	}
+
+	fd = malloc (sizeof(struct fdesc));
+	if (fd == NULL) return -1;
 
 	fd->desc_no = list_entry(list_rbegin (&curr->desc_table), struct fdesc, elem)->desc_no + 1;
 	fd->file = FD;
@@ -336,7 +337,13 @@ void close (int fd) {
 		list_remove (&fd_->elem);
 		file_lock_aquire ();
 		intr_enable ();
-		if (fd_->file > 2) file_close (fd_->file);
+		if (fd_->file > 2) {
+			struct inode *inode = file_get_inode (fd_->file);
+			if (inode_is_dir (file_get_inode (fd_->file)))
+				dir_close (fd_->file);
+			else
+				file_close (fd_->file);
+		}
 		file_lock_release ();
 		free (fd_);		
 	}

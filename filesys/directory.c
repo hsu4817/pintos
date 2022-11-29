@@ -238,7 +238,11 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 		token = strtok_r (NULL, "/", &saveptr);
 	}
 	else {
-		cur_dir = dir_reopen (thread_current ()->curdir);
+		cur_dir = thread_current ()->curdir;
+		if (cur_dir)
+			cur_dir = dir_reopen (cur_dir);
+		else 
+			cur_dir = dir_open_root ();
 	}
 
 	for (;token != NULL; token = strtok_r (NULL, "/", &saveptr)) {
@@ -273,7 +277,7 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 		if (success) {
 			if (inode) *inode = next_inode;
 			if (pdir) *pdir = cur_dir;
-			memcpy (file_name, token, 15);
+			if (file_name) memcpy (file_name, token, 15);
 		}
 		else {
 			dir_close(cur_dir);

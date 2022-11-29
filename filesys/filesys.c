@@ -89,14 +89,17 @@ filesys_create (const char *name, off_t initial_size) {
  * or if an internal memory allocation fails. */
 struct file *
 filesys_open (const char *name) {
-	struct dir *dir = dir_open_root ();
+	struct dir *dir = NULL;
 	struct inode *inode = NULL;
 
-	if (dir != NULL)
-		dir_lookup (dir, name, &inode);
+	if (!dir_walk (name, &dir, &inode, NULL, true)) {
+		return false;
+	}
 	dir_close (dir);
-
-	return file_open (inode);
+	if (inode_is_dir (inode)) 
+		return dir_open (inode);
+	else
+		return file_open (inode);
 }
 
 /* Deletes the file named NAME.
