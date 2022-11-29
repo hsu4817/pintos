@@ -153,6 +153,10 @@ fat_boot_create (void) {
 void
 fat_fs_init (void) {
 	/* TODO: Your code goes here. */
+	fat_fs->fat_length = fat_fs->bs.total_sectors - fat_fs->bs.fat_sectors;
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+	fat_fs->last_clst = fat_fs->fat_length - 1;
+	lock_init (&fat_fs->write_lock);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -165,6 +169,22 @@ fat_fs_init (void) {
 cluster_t
 fat_create_chain (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	lock_acquire (&fat_fs->write_lock);
+	cluster_t new_cluster = 0;
+	for (int i = 1; i <= fat_fs->last_clst; i++) {
+		unsigned int idx = (clst - 1 + i) % fat_fs->last_clst + 1;
+		if (idx == 1) continue;
+		if (fat_fs->fat[idx] == 0) {
+			new_cluster = idx;
+			if (clst != 0) {
+				fat_fs->fat[clst] = new_cluster;
+			}
+			fat_fs->fat[new_cluster] = EOChain;
+			break;
+		}
+	}
+	lock_release (&fat_fs->write_lock);
+	return new_cluster;
 }
 
 /* Remove the chain of clusters starting from CLST.
@@ -172,22 +192,61 @@ fat_create_chain (cluster_t clst) {
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
 	/* TODO: Your code goes here. */
+	lock_acquire (&fat_fs->write_lock);
+	cluster_t next = clst;
+	
+	while (clst != EOChain && cluster_valid (clst)) {
+		next = fat_fs->fat[clst];
+		fat_fs->fat[clst] = 0;
+		clst = next;
+	}
+	if (cluster_valid (pclst)) {
+		fat_fs->fat[pclst] = EOChain;
+	}
+	lock_release (&fat_fs->write_lock);
 }
 
 /* Update a value in the FAT table. */
 void
 fat_put (cluster_t clst, cluster_t val) {
 	/* TODO: Your code goes here. */
+	lock_acquire (&fat_fs->write_lock);
+	if (cluster_valid (clst)) {
+		fat_fs->fat[clst] = val;
+	}
+	lock_release (&fat_fs->write_lock);
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	if (cluster_valid (clst)) {
+		return fat_fs->fat[clst];
+	}
+	else return 0;
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
 	/* TODO: Your code goes here. */
+	if (cluster_valid (clst))
+		return fat_fs->data_start + clst - 1;
+	else
+		return -1;
+}
+
+cluster_t
+sector_to_cluster (disk_sector_t sector) {
+	cluster_t clst = sector - fat_fs->data_start + 1;
+	if (cluster_valid (clst))
+		return clst;
+	else
+		return 0;
+}
+
+static bool
+cluster_valid (cluster_t clst) {
+	return (clst > 0 && clst <= fat_fs->last_clst);
 }
