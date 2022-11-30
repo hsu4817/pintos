@@ -6,9 +6,14 @@
 #include "devices/disk.h"
 
 struct bitmap;
+typedef enum {
+    FILE = 0,
+    DIR = 1,
+    LINK = 2
+}inode_type;
 
 void inode_init (void);
-bool inode_create (disk_sector_t, off_t, bool is_dir);
+bool inode_create (disk_sector_t, off_t, inode_type type);
 struct inode *inode_open (disk_sector_t);
 struct inode *inode_reopen (struct inode *);
 disk_sector_t inode_get_inumber (const struct inode *);

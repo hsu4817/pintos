@@ -76,7 +76,7 @@ filesys_create (const char *name, off_t initial_size) {
 
 	inode_cluster = fat_create_chain (0);
 	if (inode_cluster) {
-		if (inode_create (cluster_to_sector (inode_cluster), initial_size, false)) {
+		if (inode_create (cluster_to_sector (inode_cluster), initial_size, FILE)) {
 			success = dir_add (dir, file_name, cluster_to_sector (inode_cluster));
 		}
 	} 
@@ -186,6 +186,32 @@ filesys_mkdir (const char *dir) {
 done:
 	dir_close (pdir);
 	dir_close (new_dir);
+	return success;
+}
+
+int
+filesys_symlink (const char *target, const char *linkpath) {
+	int success = -1;
+	struct dir *dir_link;
+	struct inode *inode_target;
+	char file_name[15];
+
+	if (!dir_walk (target, NULL, &inode_target, NULL, true))
+		goto done;
+	printf ("symlink | found target %s\n",target);
+	
+	if (!dir_walk (linkpath, &dir_link, NULL, file_name, false))
+		goto done;
+	printf ("symlink | found directory %s\n", linkpath);
+
+	if (dir_add (dir_link, file_name, inode_get_inumber (inode_target)))
+		success = 0;
+
+	printf ("symlink | create link %s success\n", linkpath);
+
+done:
+	dir_close (dir_link);
+	inode_close (inode_target);
 	return success;
 }
 

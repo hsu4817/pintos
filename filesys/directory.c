@@ -26,7 +26,7 @@ struct dir_entry {
  * given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (disk_sector_t sector, size_t entry_cnt) {
-	return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+	return inode_create (sector, entry_cnt * sizeof (struct dir_entry), DIR);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -308,12 +308,16 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 	PANIC ("dir walk | must not reach");
 	done:
 		if (success) {
+			// printf ("dir walk | walk success. data copying...\n");
 			if (inode) *inode = next_inode;
+			else if (exist) inode_close (next_inode);
 			if (pdir) *pdir = cur_dir;
+			else dir_close (cur_dir);
 			if (file_name) memcpy (file_name, token, strlen(token) + 1);
 			// printf("dir walk | return %s\n", token);
 		}
 		else {
+			// printf ("dir walk | walk fail.\n");
 			dir_close(cur_dir);
 			inode_close (next_inode);
 		}

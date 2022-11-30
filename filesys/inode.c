@@ -15,7 +15,7 @@
 struct inode_disk {
 	cluster_t start;                	/* First data cluster. */
 	off_t length;                       /* File size in bytes. */
-	unsigned is_dir;					/* 0 : File, 1 : Directory. */
+	inode_type is_dir;					/* 0 : File, 1 : Directory. */
 	unsigned magic;                     /* Magic number. */
 	uint32_t unused[124];               /* Not used. */
 };
@@ -74,7 +74,7 @@ inode_init (void) {
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
 bool
-inode_create (disk_sector_t sector, off_t length, bool is_dir) {
+inode_create (disk_sector_t sector, off_t length, inode_type is_dir) {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
 
@@ -90,7 +90,7 @@ inode_create (disk_sector_t sector, off_t length, bool is_dir) {
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
 		disk_inode->start = 0;
-		disk_inode->is_dir = is_dir ? 1 : 0;
+		disk_inode->is_dir = is_dir;
 		bool alloc_success = true;
 
 		if (sectors > 0 ) {
@@ -393,7 +393,7 @@ inode_length (const struct inode *inode) {
 
 bool
 inode_is_dir (const struct inode *inode) {
-	return inode->data.is_dir == 1;
+	return inode->data.is_dir == DIR;
 }
 
 int

@@ -575,8 +575,20 @@ int inumber (int fd){
 
 int symlink (const char *target, const char *linkpath){
 	int success;
+	struct dir *dir_tgt;
+	struct dir *dir_lnk;
+	struct inode *inode_tgt;
+	struct inode *inode_lnk;
+
+	if (target == NULL || linkpath == NULL)
+		return -1;
+	if (target[0] == '\0' || linkpath[0] == '\0')
+		return -1;
+
 	file_lock_aquire ();
-	// success = filesys_symlink (target, linkpath);
+	intr_enable ();
+	success = filesys_symlink (target, linkpath);
+	intr_disable ();
 	file_lock_release ();
 	return success;
 }
