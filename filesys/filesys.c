@@ -33,8 +33,9 @@ filesys_init (bool format) {
 	fat_open ();
 	if (format){
 		struct dir *dir = dir_open_root ();
-		if (!dir_add (dir, ".", cluster_to_sector (ROOT_DIR_CLUSTER)))
-			PANIC ("root directory creation fail");
+		if (!dir_add (dir, ".", cluster_to_sector (ROOT_DIR_CLUSTER))
+			||!dir_add (dir, "..", cluster_to_sector (ROOT_DIR_CLUSTER)))
+			PANIC ("root directory initial fail");
 		dir_close (dir);
 	}
 
@@ -75,6 +76,8 @@ filesys_create (const char *name, off_t initial_size) {
 	struct dir *dir = NULL;
 	char file_name[15];
 
+	// printf("filesys create | %s\n", name);
+
 	if (!dir_walk (name, &dir, NULL, file_name, false, thread_current ()->curdir)) 
 		return false;
 
@@ -100,6 +103,8 @@ struct file *
 filesys_open (const char *name) {
 	struct dir *dir = NULL;
 	struct inode *inode = NULL;
+
+	// printf ("filesys open | open %s\n", name);
 
 	if (strcmp(name, "/")) {
 		if (!dir_walk (name, &dir, &inode, NULL, true, thread_current ()->curdir)) {

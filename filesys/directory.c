@@ -192,7 +192,6 @@ dir_remove (struct dir *dir, const char *name) {
 			goto done;
 	}
 
-
 	/* Erase directory entry. */
 	e.in_use = false;
 	if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e)
@@ -237,7 +236,6 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 	char *token, *saveptr;
 	struct inode *next_inode = NULL;
 	struct dir *cur_dir = NULL;
-	int bytes_parsed = 0;
 	int size = strlen (target);
 	bool success = false;
 
@@ -247,23 +245,19 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 	saveptr = path;
 	while (*saveptr == '/') 
 		saveptr++;
-		bytes_parsed++;
 
 	if (saveptr > path) {
 		/* absolute path */
-		if (saveptr - path == 1)
-			cur_dir = dir_open_root ();
-		else 
-			goto done;
+		cur_dir = dir_open_root ();
 	}
-	else 
+	else {
 		/* relative path */
 		cur_dir = idir;
 		if (cur_dir)
 			cur_dir = dir_reopen(cur_dir);
 		else
 			cur_dir = dir_open_root ();
-	
+	}
 	if (cur_dir == NULL)
 		goto done;
 
@@ -272,10 +266,12 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 	while (saveptr < path + size) {
 		while (*saveptr != '/' && *saveptr != '\0') {
 			saveptr++;
-			bytes_parsed++;
 		}
-		if (token == saveptr)
-			goto done;
+		if (token == saveptr){
+			saveptr++;
+			token = saveptr;
+			continue;
+		}
 		*saveptr = '\0';
 		if (saveptr - token > 14)
 			goto done;
@@ -352,12 +348,12 @@ dir_is_empty (struct dir *dir) {
 	return true;
 }
 
-int
+bool
 dir_create_symlink (const char *target, const char *linkpath){
 	struct dir *dir;
 	char name[15];
 	if (!dir_walk (linkpath, &dir, NULL, name, false, thread_current ()->curdir))
-		return -1;
+		return false;
 	
 	cluster_t clst = fat_create_chain (0);
 	off_t size = strlen (target) + 1;

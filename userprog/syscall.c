@@ -228,6 +228,8 @@ int open (const char *file) {
 	if (file == NULL) exit(-1);
 	if (*file == '\0') return -1;
 
+	// printf ("syscall open | open %s\n", file);
+
 	file_lock_aquire ();
 
 	intr_enable ();
@@ -574,7 +576,7 @@ int inumber (int fd){
 }
 
 int symlink (const char *target, const char *linkpath){
-	int success;
+	bool success;
 	struct dir *dir_tgt;
 	struct dir *dir_lnk;
 	struct inode *inode_tgt;
