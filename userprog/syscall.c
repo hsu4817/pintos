@@ -544,6 +544,15 @@ bool mkdir (const char *dir){
 
 bool readdir (int fd, char *name){
 	bool success = false;
+	struct dir *dir = get_file_with_fd (fd);
+	if (!inode_is_dir (dir_get_inode (dir))) 
+		return false;
+
+	file_lock_aquire ();
+	intr_enable ();
+	success = dir_readdir (dir, name);
+	intr_disable ();
+	file_lock_release ();
 	return success;
 }
 

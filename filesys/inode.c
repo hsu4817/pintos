@@ -301,7 +301,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 				clst_new = clst_iter;
 			}
 			else {
-				printf("inode extend fail.\n");
 				if (cluster_EOF == 0) {
 					fat_remove_chain (inode->data.start, 0);
 				}
