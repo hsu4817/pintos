@@ -502,12 +502,12 @@ bool chdir (const char *dir){
 	intr_enable ();
 	if (strcmp (dir, "/")) {
 		if (!dir_walk (dir, &pdir, &inode, dir_name, true))
-			return false;
+			goto done;
 		// printf ("chdir | dir_walk returned %s\n", dir_name);
 		dir_close (pdir);
 		if (!inode_is_dir(inode)) {
 			inode_close (inode);
-			return false;
+			goto done;
 		}
 		ndir = dir_open (inode);
 	}
@@ -520,9 +520,10 @@ bool chdir (const char *dir){
 		cur->curdir = ndir;
 		success = true;
 	}
+	// printf ("chdir | chdir done\n");
+done:
 	intr_disable ();
 	file_lock_release ();
-	// printf ("chdir | chdir done\n");
 	return success;
 }
 
