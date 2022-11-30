@@ -7,6 +7,7 @@
 #include "filesys/directory.h"
 #include "devices/disk.h"
 #include "filesys/fat.h"
+#include "threads/thread.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -30,10 +31,13 @@ filesys_init (bool format) {
 		do_format ();
 
 	fat_open ();
-	struct dir *dir = dir_open_root ();
-	if (!dir_add (dir, ".", cluster_to_sector (ROOT_DIR_CLUSTER)))
-		PANIC ("root directory creation fail");
-	dir_close (dir);
+	if (format){
+		struct dir *dir = dir_open_root ();
+		if (!dir_add (dir, ".", cluster_to_sector (ROOT_DIR_CLUSTER)))
+			PANIC ("root directory creation fail");
+		dir_close (dir);
+	}
+
 
 #else
 	/* Original FS */
@@ -71,7 +75,7 @@ filesys_create (const char *name, off_t initial_size) {
 	struct dir *dir = NULL;
 	char file_name[15];
 
-	if (!dir_walk (name, &dir, NULL, file_name, false)) 
+	if (!dir_walk (name, &dir, NULL, file_name, false, thread_current ()->curdir)) 
 		return false;
 
 	inode_cluster = fat_create_chain (0);
@@ -98,7 +102,7 @@ filesys_open (const char *name) {
 	struct inode *inode = NULL;
 
 	if (strcmp(name, "/")) {
-		if (!dir_walk (name, &dir, &inode, NULL, true)) {
+		if (!dir_walk (name, &dir, &inode, NULL, true, thread_current ()->curdir)) {
 			return false;
 		}
 	}
@@ -124,7 +128,7 @@ filesys_remove (const char *name) {
 	bool success = false;
 
 	if (strcmp(name, "/")){
-		if (!dir_walk (name, &dir, &inode, file_name, true)) {
+		if (!dir_walk (name, &dir, &inode, file_name, true, thread_current ()->curdir)) {
 			return false;
 		}
 	}
@@ -155,7 +159,7 @@ filesys_mkdir (const char *dir) {
 	cluster_t clst = 0;
 	bool success = false;
 
-	if (!dir_walk (dir, &pdir, NULL, dir_name, false))
+	if (!dir_walk (dir, &pdir, NULL, dir_name, false, thread_current ()->curdir))
 		goto done;
 	
 	// printf ("mkdir | dir walk returned %s\n", dir_name);
@@ -186,32 +190,6 @@ filesys_mkdir (const char *dir) {
 done:
 	dir_close (pdir);
 	dir_close (new_dir);
-	return success;
-}
-
-int
-filesys_symlink (const char *target, const char *linkpath) {
-	int success = -1;
-	struct dir *dir_link;
-	struct inode *inode_target;
-	char file_name[15];
-
-	if (!dir_walk (target, NULL, &inode_target, NULL, true))
-		goto done;
-	printf ("symlink | found target %s\n",target);
-	
-	if (!dir_walk (linkpath, &dir_link, NULL, file_name, false))
-		goto done;
-	printf ("symlink | found directory %s\n", linkpath);
-
-	if (dir_add (dir_link, file_name, inode_get_inumber (inode_target)))
-		success = 0;
-
-	printf ("symlink | create link %s success\n", linkpath);
-
-done:
-	dir_close (dir_link);
-	inode_close (inode_target);
 	return success;
 }
 

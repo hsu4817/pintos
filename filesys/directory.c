@@ -6,8 +6,8 @@
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "filesys/fat.h"
-#include "threads/thread.h"
 #include "lib/string.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir {
@@ -229,7 +229,8 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1]) {
 /* Walk through dir TARGET. Stores parent directory of target to PDIR, 
  * and stores inode of target to INODE if EXIST is true. */
 bool
-dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *file_name, bool exist) {	
+dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *file_name, 
+			bool exist, struct dir *idir) {	
 	char *path = malloc (strlen(target)+1);
 	strlcpy (path, target, strlen(target)+1);
 
@@ -257,7 +258,7 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 	}
 	else 
 		/* relative path */
-		cur_dir = thread_current ()->curdir;
+		cur_dir = idir;
 		if (cur_dir)
 			cur_dir = dir_reopen(cur_dir);
 		else
@@ -283,7 +284,11 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 			// printf ("dir walk | goal is %s\n", token);
 			dir_lookup (cur_dir, token, &next_inode);
 			if (exist && next_inode) {
-				success = true;
+				if (inode_get_type (next_inode) == LINK) {
+					success = dir_symlink_resolve (&cur_dir, &next_inode);
+				}
+				else
+					success = true;
 			}
 			else if (!exist && (next_inode == NULL)) {
 				success = true;
@@ -296,8 +301,13 @@ dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *fil
 			}
 		}
 
-		if (!inode_is_dir(next_inode))
+		if (inode_get_type (next_inode) == LINK) {
+			if (!dir_symlink_resolve (&cur_dir, &next_inode))
+				goto done;
+		}
+		if (!inode_is_dir (next_inode))
 			goto done;
+		
 		dir_close (cur_dir);
 		cur_dir = dir_open (next_inode);
 		if (cur_dir == NULL)
@@ -340,4 +350,45 @@ dir_is_empty (struct dir *dir) {
 		}
 	}
 	return true;
+}
+
+int
+dir_create_symlink (const char *target, const char *linkpath){
+	struct dir *dir;
+	char name[15];
+	if (!dir_walk (linkpath, &dir, NULL, name, false, thread_current ()->curdir))
+		return -1;
+	
+	cluster_t clst = fat_create_chain (0);
+	off_t size = strlen (target) + 1;
+	struct inode *inode;
+	bool success = false;
+	if (clst == 0)
+		return false;
+	
+	if (inode_create (cluster_to_sector (clst), size, LINK)){
+		inode = inode_open (cluster_to_sector (clst));
+		inode_write_at (inode, target, size, 0);
+		success = dir_add (dir, name, cluster_to_sector (clst));
+		if (!success) 
+			inode_remove (inode);
+		inode_close (inode);
+		return success;
+	}
+	else {
+		fat_remove_chain (clst, 0);
+		return false;
+	}
+}
+
+bool
+dir_symlink_resolve (struct dir **dir, struct inode **inode) {
+	struct inode *link = *inode;
+	size_t path_length = inode_length (link);
+	char *path = malloc (path_length);
+	inode_read_at (link, path, path_length, 0);
+
+	bool success = dir_walk (path, dir, inode, NULL, true, *dir);
+	free(path);
+	return success;
 }

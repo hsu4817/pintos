@@ -26,7 +26,11 @@ bool dir_lookup (const struct dir *, const char *name, struct inode **);
 bool dir_add (struct dir *, const char *name, disk_sector_t);
 bool dir_remove (struct dir *, const char *name);
 bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
-bool dir_walk (const char *target, struct dir **pdir, struct inode **inode, char *file_name, bool exist);
+bool dir_walk (const char *target, struct dir **pdir, struct inode **inode, 
+                char *file_name, bool exist, struct dir *idir);
 bool dir_is_empty (struct dir *dir);
+int dir_create_symlink (const char *target, const char *linkpath);
+bool dir_symlink_resolve (struct dir **dir, struct inode **inode);
+
 
 #endif /* filesys/directory.h */

@@ -501,7 +501,7 @@ bool chdir (const char *dir){
 	file_lock_aquire ();
 	intr_enable ();
 	if (strcmp (dir, "/")) {
-		if (!dir_walk (dir, &pdir, &inode, dir_name, true))
+		if (!dir_walk (dir, &pdir, &inode, dir_name, true, cur->curdir))
 			goto done;
 		// printf ("chdir | dir_walk returned %s\n", dir_name);
 		dir_close (pdir);
@@ -587,8 +587,8 @@ int symlink (const char *target, const char *linkpath){
 
 	file_lock_aquire ();
 	intr_enable ();
-	success = filesys_symlink (target, linkpath);
+	success = dir_create_symlink (target, linkpath);
 	intr_disable ();
 	file_lock_release ();
-	return success;
+	return success ? 0 : -1;
 }

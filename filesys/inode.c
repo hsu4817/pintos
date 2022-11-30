@@ -400,3 +400,8 @@ int
 inode_get_opencnt (const struct inode *inode) {
 	return inode->open_cnt;
 }
+
+inode_type
+inode_get_type (const struct inode *inode) {
+	return inode->data.is_dir;
+}
